@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -29,6 +29,11 @@
         "command": "kaveri.runTests",
         "title": "Kaveri: Run Tests",
         "icon": "$(beaker)"
+      },
+      {
+        "command": "kaveri.submitAnswer",
+        "title": "Kaveri: Submit Answer",
+        "icon": "$(cloud-upload)"
       }
     ],
     "viewsContainers": {
@@ -65,7 +70,12 @@
         {
           "command": "kaveri.runTests",
           "when": "resourceFilename == main.py",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "kaveri.submitAnswer",
+          "when": "resourceFilename == main.py",
+          "group": "navigation@2"
         }
       ]
     }
