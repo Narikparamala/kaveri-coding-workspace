@@ -24,6 +24,7 @@ jobs:
           node --check apps/vscode-extension/server-extension.js
           node --check apps/vscode-extension/supabase.js
           node --check apps/vscode-extension/assignments-api.js
+          node --check apps/vscode-extension/results-api.js
 
       - name: Install dashboard dependencies
         working-directory: apps/dashboard
