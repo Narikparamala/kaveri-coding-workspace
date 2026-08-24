@@ -1,17 +1,48 @@
-/* Compact responsive navbar for Kaveri faculty/admin pages.
-   Loaded after all other dashboard CSS so it owns navbar layout only. */
+/* Responsive navbar for the existing, working Kaveri dashboard headers.
+   This file only owns layout; it does not touch Supabase or dashboard data. */
 
 .topbar {
   position: relative !important;
   top: auto !important;
 }
 
-/* Desktop stays horizontal. */
+.mobile-menu-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255,255,255,.35);
+  border-radius: 4px;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font: 700 20px/1 "Plus Jakarta Sans", sans-serif;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.batch-topbar h1::after {
+  content: none !important;
+}
+
+.batch-topbar h1 {
+  font-size: clamp(24px, 3vw, 32px) !important;
+}
+
+.batch-section-tabs {
+  margin-top: 10px;
+}
+
+.batch-nav-link {
+  text-decoration: none;
+}
+
+/* Desktop */
 @media (min-width: 901px) {
   .topbar {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
+    gap: 22px !important;
   }
 
   .topbar-left {
@@ -33,8 +64,8 @@
   }
 }
 
-/* Narrow laptop / tablet: two-row navbar, not three rows. */
-@media (max-width: 900px) {
+/* Tablet / narrow laptop: two-row navbar. */
+@media (min-width: 701px) and (max-width: 900px) {
   .topbar {
     display: grid !important;
     grid-template-columns: minmax(0, 1fr) auto !important;
@@ -49,12 +80,12 @@
     margin-bottom: 18px !important;
   }
 
-  /* Let title and tabs become direct grid children. */
   .topbar-left {
     display: contents !important;
   }
 
-  .topbar-left > div:first-child {
+  .topbar-left > div:first-child,
+  .batch-topbar > div:first-child {
     grid-area: brand !important;
     min-width: 0 !important;
   }
@@ -63,9 +94,6 @@
     margin: 0 !important;
     font-size: clamp(21px, 3.8vw, 27px) !important;
     line-height: 1.15 !important;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .topbar .eyebrow {
@@ -74,23 +102,27 @@
     letter-spacing: .08em !important;
   }
 
-  .section-tabs {
+  .section-tabs,
+  .batch-nav {
     grid-area: nav !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  .section-tabs {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     gap: 4px !important;
-    width: 100% !important;
     max-width: none !important;
-    margin: 0 !important;
-    overflow: visible !important;
   }
 
   .section-tabs .nav-tab,
-  .section-tabs .manage-batches-link {
+  .section-tabs .manage-batches-link,
+  .section-tabs .batch-nav-link {
     width: 100% !important;
     min-width: 0 !important;
     min-height: 40px !important;
-    padding: 8px 8px !important;
+    padding: 8px !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -108,8 +140,6 @@
     gap: 7px !important;
   }
 
-  /* Name is already represented by the signed-in session; hiding it here
-     saves a complete navbar row at tablet widths. */
   .teacher-copy {
     display: none !important;
   }
@@ -128,7 +158,6 @@
     font-size: 12px !important;
   }
 
-  /* Exact logo stays vertically centered with the first navbar row. */
   .topbar::before {
     left: 13px !important;
     top: 14px !important;
@@ -138,66 +167,145 @@
   }
 }
 
-/* Phone: keep same two-row architecture, just make controls smaller. */
-@media (max-width: 600px) {
+/* Phone / very narrow embedded browser: real collapsible navbar. */
+@media (max-width: 700px) {
   .dashboard-shell {
     width: calc(100% - 20px) !important;
+    padding-top: 10px !important;
   }
 
   .topbar {
-    margin-inline: 0 !important;
-    padding: 12px 10px 12px 68px !important;
-    border-radius: var(--radius-lg) !important;
-    column-gap: 8px !important;
-    row-gap: 9px !important;
+    display: block !important;
+    margin: 0 0 18px !important;
+    padding: 12px 58px 12px 68px !important;
+    min-height: 72px !important;
+    border-radius: 8px !important;
   }
 
   .topbar::before {
     left: 10px !important;
     top: 12px !important;
+    transform: none !important;
     width: 48px !important;
     height: 48px !important;
   }
 
-  .topbar h1 {
-    font-size: clamp(18px, 5vw, 22px) !important;
+  .topbar-left,
+  .batch-topbar > div:first-child {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .topbar-left > div:first-child {
+    min-width: 0 !important;
+  }
+
+  .topbar h1,
+  .batch-topbar h1 {
+    margin: 0 !important;
+    max-width: 100% !important;
+    font-size: clamp(18px, 5vw, 23px) !important;
+    line-height: 1.15 !important;
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
   }
 
   .topbar .eyebrow {
+    margin: 0 0 4px !important;
     font-size: 9px !important;
+    letter-spacing: .07em !important;
   }
 
+  .mobile-menu-toggle {
+    display: flex;
+    position: absolute;
+    right: 10px;
+    top: 14px;
+    z-index: 3;
+  }
+
+  .section-tabs,
+  .batch-nav,
   .teacher-block {
-    gap: 5px !important;
+    display: none !important;
+  }
+
+  .topbar.mobile-open {
+    padding-right: 12px !important;
+    padding-bottom: 14px !important;
+  }
+
+  .topbar.mobile-open .topbar-left,
+  .topbar.mobile-open > div:first-child {
+    padding-right: 46px;
+  }
+
+  .topbar.mobile-open .section-tabs,
+  .topbar.mobile-open .batch-nav {
+    display: grid !important;
+    width: 100% !important;
+    margin-top: 14px !important;
+  }
+
+  .topbar.mobile-open .batch-nav .section-tabs {
+    margin-top: 0 !important;
+  }
+
+  .topbar.mobile-open .section-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 4px !important;
+    padding: 3px !important;
+  }
+
+  .topbar.mobile-open .section-tabs .nav-tab,
+  .topbar.mobile-open .section-tabs .manage-batches-link,
+  .topbar.mobile-open .section-tabs .batch-nav-link {
+    display: flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 40px !important;
+    padding: 7px 5px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    font-size: 11px !important;
+    text-decoration: none !important;
+  }
+
+  .topbar.mobile-open .teacher-block {
+    display: flex !important;
+    width: 100% !important;
+    margin-top: 10px !important;
+    padding-top: 10px !important;
+    border-top: 1px solid rgba(255,255,255,.18);
+    align-items: center !important;
+    justify-content: flex-end !important;
+    gap: 7px !important;
+  }
+
+  .teacher-copy {
+    display: none !important;
   }
 
   .teacher-block .icon-button,
   .teacher-block .theme-toggle {
-    width: 34px !important;
-    height: 34px !important;
-    min-height: 34px !important;
-    flex-basis: 34px !important;
-    font-size: 15px !important;
+    width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    flex: 0 0 36px !important;
   }
 
   .teacher-block #logout {
-    min-height: 34px !important;
-    padding: 6px 8px !important;
-    font-size: 11px !important;
-  }
-
-  .section-tabs .nav-tab,
-  .section-tabs .manage-batches-link {
-    min-height: 38px !important;
-    padding-inline: 4px !important;
+    min-height: 36px !important;
+    padding: 6px 10px !important;
     font-size: 11px !important;
   }
 }
 
-/* Tiny phones: title remains readable and Sign out becomes icon-sized text. */
-@media (max-width: 410px) {
+@media (max-width: 390px) {
   .topbar {
-    grid-template-columns: minmax(0, 1fr) auto !important;
     padding-left: 62px !important;
   }
 
@@ -206,16 +314,7 @@
     height: 42px !important;
   }
 
-  .topbar h1 {
-    font-size: 17px !important;
-  }
-
-  .section-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
-  }
-
-  .section-tabs .nav-tab,
-  .section-tabs .manage-batches-link {
-    font-size: 10px !important;
+  .topbar.mobile-open .section-tabs {
+    grid-template-columns: 1fr !important;
   }
 }
