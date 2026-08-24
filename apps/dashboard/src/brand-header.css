@@ -1,38 +1,43 @@
 .topbar {
-  padding-left: 82px !important;
+  padding-left: 92px !important;
 }
 
 .topbar::before {
   content: "";
   position: absolute;
-  left: 18px;
+  left: 16px;
   top: 50%;
-  width: 48px;
-  height: 48px;
+  width: 62px;
+  height: 62px;
   transform: translateY(-50%);
-  background: #ffffff url('/kaveri-mark.svg') center / 42px 42px no-repeat;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(255,255,255,.34), 0 5px 14px rgba(0,0,0,.10);
+  background-color: #ffffff;
+  background-image: url('https://raw.githubusercontent.com/Narikparamala/kaveritechnologies2.0/main/public/assets/images/WhatsApp_Image_2026-06-16_at_10.34.22.jpeg');
+  background-position: center;
+  background-size: contain;
+  background-repeat: no-repeat;
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.30), 0 5px 14px rgba(0,0,0,.10);
 }
 
 @media (max-width: 767px) {
   .topbar {
-    padding-left: 70px !important;
+    padding-left: 82px !important;
   }
   .topbar::before {
-    left: 14px;
-    width: 42px;
-    height: 42px;
-    background-size: 37px 37px;
+    left: 12px;
+    width: 58px;
+    height: 58px;
   }
 }
 
 @media (max-width: 560px) {
   .topbar {
-    padding-left: 66px !important;
+    padding-left: 76px !important;
   }
   .topbar::before {
-    top: 14px;
+    top: 12px;
     transform: none;
+    width: 54px;
+    height: 54px;
   }
 }
