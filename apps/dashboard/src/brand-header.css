@@ -1,0 +1,38 @@
+.topbar {
+  padding-left: 82px !important;
+}
+
+.topbar::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  transform: translateY(-50%);
+  background: #ffffff url('/kaveri-mark.svg') center / 42px 42px no-repeat;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.34), 0 5px 14px rgba(0,0,0,.10);
+}
+
+@media (max-width: 767px) {
+  .topbar {
+    padding-left: 70px !important;
+  }
+  .topbar::before {
+    left: 14px;
+    width: 42px;
+    height: 42px;
+    background-size: 37px 37px;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding-left: 66px !important;
+  }
+  .topbar::before {
+    top: 14px;
+    transform: none;
+  }
+}
