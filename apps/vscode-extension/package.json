@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -40,6 +40,15 @@
         "icon": "$(cloud-upload)"
       },
       {
+        "command": "kaveri.refreshResults",
+        "title": "Kaveri: Refresh My Results",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kaveri.openResult",
+        "title": "Kaveri: Open Result"
+      },
+      {
         "command": "kaveri.signIn",
         "title": "Kaveri: Sign In with Google",
         "icon": "$(account)"
@@ -63,6 +72,10 @@
         {
           "id": "kaveri.assignments",
           "name": "My Assignments"
+        },
+        {
+          "id": "kaveri.results",
+          "name": "My Results"
         }
       ]
     },
@@ -82,6 +95,16 @@
           "command": "kaveri.openWorkspaceFolder",
           "when": "view == kaveri.assignments",
           "group": "navigation@3"
+        },
+        {
+          "command": "kaveri.signIn",
+          "when": "view == kaveri.results",
+          "group": "navigation@1"
+        },
+        {
+          "command": "kaveri.refreshResults",
+          "when": "view == kaveri.results",
+          "group": "navigation@2"
         }
       ],
       "editor/title": [
