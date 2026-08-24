@@ -5,14 +5,14 @@ import './batches.css';
 const SUPABASE_URL = 'https://atcncxckuokjarsxckwy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_A5ARKVkEnJVtGV0mxrdtyw_3YmLQ4nu';
 
-const directLock = async (_name, _acquireTimeout, fn) => await fn();
-
+// Batch Manager uses its own auth storage key. This prevents its local-development
+// auth lock/session from competing with the main teacher dashboard in other tabs.
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
+    storageKey: 'kaveri-coding-batch-manager-auth-v1',
     persistSession: true,
     autoRefreshToken: true,
-    detectSessionInUrl: true,
-    lock: directLock
+    detectSessionInUrl: true
   }
 });
 
@@ -103,12 +103,13 @@ function renderError() {
 }
 
 function withTimeout(promiseLike, label, milliseconds = 8000) {
+  let timer;
   return Promise.race([
     Promise.resolve(promiseLike),
     new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds / 1000} seconds.`)), milliseconds);
+      timer = setTimeout(() => reject(new Error(`${label} timed out after ${milliseconds / 1000} seconds.`)), milliseconds);
     })
-  ]);
+  ]).finally(() => clearTimeout(timer));
 }
 
 function activeMemberships(batchId) {
@@ -150,7 +151,7 @@ function batchCard(batch) {
         </div>
         <div class="batch-card-actions">
           <span class="member-count">${members.length} student${members.length === 1 ? '' : 's'}</span>
-          ${canDelete ? `<button class="delete-batch" data-batch="${batch.id}" data-name="${esc(batch.name)}">Delete batch</button>` : ''}
+          ${canDelete ? `<button class="delete-batch" data-batch="${batch.id}" title="Delete batch">Delete batch</button>` : ''}
         </div>
       </div>
 
@@ -192,10 +193,14 @@ function batchCard(batch) {
 function assignmentRow(assignment) {
   const selected = new Set(targetBatchIds(assignment.id));
   const everyone = selected.size === 0;
+
   return `
-    <article class="delivery-card">
+    <article class="delivery-card" data-assignment-id="${assignment.id}">
       <div class="delivery-head">
-        <div><h3>${esc(assignment.title)}</h3><p class="muted">${esc(assignment.assignment_key)}</p></div>
+        <div>
+          <h3>${esc(assignment.title)}</h3>
+          <p class="muted">${esc(assignment.assignment_key)}</p>
+        </div>
         <span class="delivery-mode ${everyone ? 'everyone' : 'targeted'}">${everyone ? 'Everyone' : `${selected.size} batch${selected.size === 1 ? '' : 'es'}`}</span>
       </div>
       <div class="batch-check-grid">
@@ -203,7 +208,7 @@ function assignmentRow(assignment) {
           <label class="batch-check">
             <input type="checkbox" class="target-checkbox" data-assignment="${assignment.id}" data-batch="${batch.id}" ${selected.has(batch.id) ? 'checked' : ''} />
             <span>${esc(batch.name)}</span>
-          </label>`).join('') : `<p class="empty-inline">Create a batch first.</p>`}
+          </label>`).join('') : `<p class="empty-inline">Create a batch first. Until then this published question is visible to everyone.</p>`}
       </div>
       <p class="delivery-help">${everyone ? 'No batch selected → every authenticated student can receive this published question.' : 'Only students enrolled in the selected batches can receive this question.'}</p>
     </article>`;
@@ -216,8 +221,18 @@ function renderPage() {
   app.innerHTML = `
     <div class="dashboard-shell batch-shell">
       <header class="topbar batch-topbar">
-        <div><p class="eyebrow">Kaveri Technologies</p><h1>Batch Manager</h1><div class="batch-nav"><a href="/" class="secondary small nav-link">← Submissions & Questions</a></div></div>
-        <div class="teacher-block"><div class="teacher-copy"><strong>${esc(profileName)}</strong><span>${esc(state.profile?.role || '')}</span></div><button id="refresh" class="icon-button">↻</button><button id="logout" class="secondary small">Sign out</button></div>
+        <div>
+          <p class="eyebrow">Kaveri Technologies</p>
+          <h1>Batch Manager</h1>
+          <div class="batch-nav">
+            <a href="/" class="secondary small nav-link">← Submissions & Questions</a>
+          </div>
+        </div>
+        <div class="teacher-block">
+          <div class="teacher-copy"><strong>${esc(profileName)}</strong><span>${esc(state.profile?.role || '')}</span></div>
+          <button id="refresh" class="icon-button" title="Refresh">↻</button>
+          <button id="logout" class="secondary small">Sign out</button>
+        </div>
       </header>
 
       <section class="batch-metrics">
@@ -227,11 +242,42 @@ function renderPage() {
         <article class="metric-card"><span>Targeted questions</span><strong>${new Set(state.targets.map((target) => target.assignment_id)).size}</strong></article>
       </section>
 
-      ${canCreateBatch ? `<section class="panel batch-create-panel"><div class="section-heading"><div><p class="eyebrow">Setup</p><h2>Create batch</h2></div></div><form id="create-batch-form" class="create-batch-form"><label>Batch name<input id="batch-name" required placeholder="Example: Python Batch 1" /></label><label>Maximum students<input id="batch-max" type="number" min="1" value="50" /></label><label class="wide-field">Description<input id="batch-description" placeholder="Example: Morning Python beginner batch" /></label><button class="primary" type="submit">+ Create Batch</button></form><p id="batch-message" class="fineprint"></p></section>` : ''}
+      ${canCreateBatch ? `
+        <section class="panel batch-create-panel">
+          <div class="section-heading">
+            <div><p class="eyebrow">Setup</p><h2>Create batch</h2></div>
+          </div>
+          <form id="create-batch-form" class="create-batch-form">
+            <label>Batch name<input id="batch-name" required placeholder="Example: Python Batch 1" /></label>
+            <label>Maximum students<input id="batch-max" type="number" min="1" value="50" /></label>
+            <label class="wide-field">Description<input id="batch-description" placeholder="Example: Morning Python beginner batch" /></label>
+            <button class="primary" type="submit">+ Create Batch</button>
+          </form>
+          <p id="batch-message" class="fineprint"></p>
+        </section>` : `
+        <section class="panel faculty-note"><strong>Batch creation is controlled by a super-admin.</strong><span>You can manage batches assigned to your faculty account.</span></section>`}
 
-      <section class="batch-section"><div class="section-heading"><div><p class="eyebrow">Students</p><h2>Batch membership</h2></div><p class="muted">Students can be added manually or join with the batch code.</p></div><div class="batch-grid">${state.batches.length ? state.batches.map(batchCard).join('') : `<section class="panel empty-batches"><h3>No batches yet</h3></section>`}</div></section>
+      <section class="batch-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">Students</p><h2>Batch membership</h2></div>
+          <p class="muted">Students can be added here manually or join themselves with the batch code.</p>
+        </div>
+        <div class="batch-grid">
+          ${state.batches.length ? state.batches.map(batchCard).join('') : `<section class="panel empty-batches"><h3>No batches yet</h3><p class="muted">Create your first batch above, then add students.</p></section>`}
+        </div>
+      </section>
 
-      <section class="batch-section"><div class="section-heading"><div><p class="eyebrow">Delivery</p><h2>Assign questions to batches</h2></div><p class="muted">No selection means everyone.</p></div><div class="delivery-grid">${state.assignments.filter((assignment) => assignment.is_published).map(assignmentRow).join('')}</div></section>
+      <section class="batch-section">
+        <div class="section-heading">
+          <div><p class="eyebrow">Delivery</p><h2>Assign questions to batches</h2></div>
+          <p class="muted">No selection means everyone. Selecting batches restricts the question to those students.</p>
+        </div>
+        <div class="delivery-grid">
+          ${state.assignments.filter((assignment) => assignment.is_published).length
+            ? state.assignments.filter((assignment) => assignment.is_published).map(assignmentRow).join('')
+            : `<section class="panel empty-batches"><h3>No published questions</h3><p class="muted">Publish a question from the Question Bank first.</p></section>`}
+        </div>
+      </section>
     </div>`;
 
   document.querySelector('#logout').addEventListener('click', logout);
@@ -259,25 +305,54 @@ async function createBatch(event) {
   const description = document.querySelector('#batch-description').value.trim();
   const maxStudents = Number(document.querySelector('#batch-max').value || 50);
   if (!name) return;
+
   message.textContent = 'Creating…';
-  const { error } = await supabase.from('batches').insert({ name, description: description || null, max_students: maxStudents, status: 'active', created_by: state.session.user.id, updated_at: new Date().toISOString() });
-  if (error) return message.textContent = error.message;
+  const { error } = await supabase.from('batches').insert({
+    name,
+    description: description || null,
+    max_students: maxStudents,
+    status: 'active',
+    created_by: state.session.user.id,
+    updated_at: new Date().toISOString()
+  });
+
+  if (error) {
+    message.textContent = error.message;
+    return;
+  }
+
   message.textContent = 'Batch created.';
   await loadData();
 }
 
 async function generateCode(event) {
   const button = event.currentTarget;
+  const batchId = button.dataset.batch;
   const code = generateJoinCodeValue();
   button.disabled = true;
-  const { error } = await supabase.from('batches').update({ join_code: code, updated_at: new Date().toISOString() }).eq('id', button.dataset.batch);
-  if (error) { button.disabled = false; return alert(error.message); }
+  button.textContent = 'Generating…';
+
+  const { error } = await supabase
+    .from('batches')
+    .update({ join_code: code, updated_at: new Date().toISOString() })
+    .eq('id', batchId);
+
+  if (error) {
+    button.disabled = false;
+    button.textContent = 'Generate code';
+    return alert(error.message);
+  }
+
   await loadData();
 }
 
 async function copyCode(event) {
   const code = event.currentTarget.dataset.code;
-  try { await navigator.clipboard.writeText(code); } catch { window.prompt('Copy this batch code:', code); }
+  try {
+    await navigator.clipboard.writeText(code);
+  } catch {
+    window.prompt('Copy this batch code:', code);
+  }
 }
 
 async function addStudent(event) {
@@ -354,14 +429,14 @@ async function loadData() {
 }
 
 async function loadPage() {
-  renderLoading('Checking teacher session…', 'Step A');
+  renderLoading('Checking teacher session…', 'Batch Manager has its own local login session.');
   try {
     const sessionResult = await withTimeout(supabase.auth.getSession(), 'Reading teacher session');
     if (sessionResult.error) throw sessionResult.error;
     state.session = sessionResult.data?.session || null;
     if (!state.session) return renderLogin();
 
-    renderLoading('Loading teacher profile…', 'Step B');
+    renderLoading('Loading teacher profile…', 'Verifying faculty / super-admin access.');
     const profileResult = await withTimeout(
       supabase.from('profiles').select('id,email,full_name,role,is_active').eq('id', state.session.user.id).maybeSingle(),
       'Loading teacher profile'
