@@ -1,0 +1,303 @@
+/* Shared Kaveri faculty/admin theme layer. Keeps product styling separate from data logic. */
+
+:root[data-theme='dark'] {
+  --surface: #07111f;
+  --surface-dim: #050b14;
+  --surface-bright: #0b1727;
+  --surface-lowest: #0d1a2c;
+  --surface-low: #0a1524;
+  --surface-container: #112036;
+  --surface-high: #14263d;
+  --surface-highest: #19304d;
+  --on-surface: #e7eef8;
+  --on-surface-variant: #b8c7d9;
+  --outline: #7790ab;
+  --outline-variant: #2a3f59;
+  --primary-soft: #102945;
+  --primary-fixed: #143453;
+  --primary-fixed-dim: #1c4d77;
+  --gold-soft: #332d08;
+  --sky-soft: #082b3c;
+  --success: #6fe0a3;
+  --success-soft: #113828;
+  --warning: #ffd266;
+  --warning-soft: #3b300d;
+  --error: #ff9d96;
+  --error-soft: #3d1817;
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, .22);
+}
+
+html[data-theme='dark'],
+html[data-theme='dark'] body {
+  background: var(--surface);
+  color: var(--on-surface);
+}
+
+html[data-theme='dark'] h1,
+html[data-theme='dark'] h2,
+html[data-theme='dark'] h3,
+html[data-theme='dark'] .metric-card strong,
+html[data-theme='dark'] .review-form label,
+html[data-theme='dark'] .question-form label,
+html[data-theme='dark'] .question-test-row label,
+html[data-theme='dark'] .create-batch-form label,
+html[data-theme='dark'] .member-row strong,
+html[data-theme='dark'] .join-code-box strong,
+html[data-theme='dark'] th {
+  color: #e9f2ff;
+}
+
+html[data-theme='dark'] .login-shell {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(0, 174, 239, .09), transparent 30%),
+    radial-gradient(circle at 88% 86%, rgba(252, 212, 0, .08), transparent 24%),
+    var(--surface);
+}
+
+html[data-theme='dark'] .login-card,
+html[data-theme='dark'] .panel,
+html[data-theme='dark'] .metric-card,
+html[data-theme='dark'] .batch-card,
+html[data-theme='dark'] .delivery-card,
+html[data-theme='dark'] .drawer,
+html[data-theme='dark'] .test-card {
+  background: var(--surface-lowest);
+  border-color: #233a54;
+}
+
+html[data-theme='dark'] .filters,
+html[data-theme='dark'] .question-toolbar,
+html[data-theme='dark'] .publish-toggle,
+html[data-theme='dark'] .question-test-row {
+  background: var(--surface-low);
+  border-color: #263b54;
+}
+
+html[data-theme='dark'] input,
+html[data-theme='dark'] select,
+html[data-theme='dark'] textarea {
+  background: #0b1728;
+  color: var(--on-surface);
+  border-color: #304862;
+}
+
+html[data-theme='dark'] input::placeholder,
+html[data-theme='dark'] textarea::placeholder {
+  color: #8196ad;
+}
+
+html[data-theme='dark'] input[readonly] {
+  background: #091321;
+  color: #91a4b9;
+}
+
+html[data-theme='dark'] table {
+  background: var(--surface-lowest);
+}
+html[data-theme='dark'] th {
+  background: #0a1728;
+}
+html[data-theme='dark'] th,
+html[data-theme='dark'] td {
+  border-color: #1b2d43;
+  color: var(--on-surface);
+}
+html[data-theme='dark'] tbody tr:hover {
+  background: #0f2035;
+}
+
+html[data-theme='dark'] .question-note {
+  background: #2d290b;
+  border-color: #4b4210;
+}
+html[data-theme='dark'] .drawer-section,
+html[data-theme='dark'] .member-list,
+html[data-theme='dark'] .member-row {
+  border-color: #20354d;
+}
+html[data-theme='dark'] .drawer-meta span,
+html[data-theme='dark'] .member-count {
+  background: #102945;
+  color: #9fcbff;
+}
+html[data-theme='dark'] .status-pill,
+html[data-theme='dark'] .publish-pill.draft {
+  background: #17263a;
+  color: #b7c7da;
+}
+html[data-theme='dark'] .status-needs_changes {
+  background: #382315;
+  color: #ffb56f;
+}
+
+html[data-theme='dark'] pre {
+  background: #050b13;
+  color: #dbe9f8;
+  border-color: #1d3048;
+}
+html[data-theme='dark'] .save-question-bar {
+  background: rgba(9, 21, 37, .98);
+  border-color: #273c58;
+}
+
+html[data-theme='dark'] .delete-batch {
+  background: transparent;
+  color: #ff9d96;
+  border-color: #75433f;
+}
+html[data-theme='dark'] .delete-batch:hover {
+  background: #3d1817;
+}
+html[data-theme='dark'] .join-code-box {
+  background: linear-gradient(90deg, #0c2945, #0b1f34);
+  border-color: #24445f;
+}
+html[data-theme='dark'] .batch-check span {
+  background: #0c192a;
+  color: #c4d2e3;
+  border-color: #2a425c;
+}
+html[data-theme='dark'] .batch-check:hover span {
+  background: #102945;
+}
+html[data-theme='dark'] .batch-check input:checked + span {
+  background: #332d08;
+  color: #ffe785;
+  border-color: #8a7600;
+}
+html[data-theme='dark'] .delivery-head p,
+html[data-theme='dark'] .delivery-help,
+html[data-theme='dark'] .member-row small,
+html[data-theme='dark'] .empty-inline,
+html[data-theme='dark'] .table-subtext,
+html[data-theme='dark'] .fineprint {
+  color: #93a6bc;
+}
+
+/* Theme switch */
+.theme-toggle {
+  font-size: 17px !important;
+  line-height: 1;
+  flex: 0 0 40px;
+}
+
+/* Batches is normal navigation, never a floating overlay. */
+.manage-batches-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.batch-manager-shortcut { display: none !important; }
+
+/* Exact uploaded Kaveri company logo. */
+.brand-mark {
+  width: 82px !important;
+  height: 82px !important;
+  border-radius: 8px !important;
+  font-size: 0 !important;
+  background-color: #fff !important;
+  background-image: url('https://raw.githubusercontent.com/Narikparamala/kaveritechnologies2.0/main/public/assets/images/WhatsApp_Image_2026-06-16_at_10.34.22.jpeg') !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  box-shadow: 0 0 0 1px rgba(0,75,141,.12) !important;
+}
+
+/* Better behavior on narrow laptops and tablets. */
+@media (max-width: 1180px) {
+  .topbar {
+    align-items: flex-start;
+  }
+  .topbar-left {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .section-tabs {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-direction: column;
+  }
+  .teacher-block {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .topbar-left {
+    width: 100%;
+  }
+  .section-tabs {
+    width: 100%;
+  }
+  .section-tabs .nav-tab {
+    flex: 1 1 120px;
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 767px) {
+  .teacher-block {
+    display: grid;
+    grid-template-columns: 1fr 40px 40px auto;
+    align-items: center;
+    gap: 8px;
+  }
+  .teacher-copy {
+    display: flex !important;
+    min-width: 0;
+    text-align: left;
+  }
+  .teacher-copy strong,
+  .teacher-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .section-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .section-tabs .nav-tab {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+  }
+  .filters {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-shell {
+    width: calc(100% - 24px) !important;
+  }
+  .topbar {
+    margin-inline: -12px !important;
+  }
+  .teacher-block {
+    grid-template-columns: 1fr 38px 38px;
+  }
+  .teacher-block #logout {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+  .section-tabs {
+    grid-template-columns: 1fr;
+  }
+  .metrics-grid,
+  .batch-metrics {
+    grid-template-columns: 1fr !important;
+  }
+  .metric-card {
+    min-height: auto;
+  }
+  .brand-mark {
+    width: 72px !important;
+    height: 72px !important;
+  }
+}
