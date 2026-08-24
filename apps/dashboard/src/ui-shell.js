@@ -30,8 +30,74 @@ function toggleTheme() {
   applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 }
 
+function closeMobileMenu(topbar) {
+  if (!topbar) return;
+  topbar.classList.remove('mobile-open');
+  const toggle = topbar.querySelector('.mobile-menu-toggle');
+  if (toggle) {
+    toggle.textContent = '☰';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-label', 'Open navigation menu');
+  }
+}
+
+function ensureMobileMenu(topbar) {
+  if (!topbar || topbar.querySelector('.mobile-menu-toggle')) return;
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'mobile-menu-toggle';
+  button.textContent = '☰';
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-label', 'Open navigation menu');
+
+  button.addEventListener('click', () => {
+    const open = topbar.classList.toggle('mobile-open');
+    button.textContent = open ? '✕' : '☰';
+    button.setAttribute('aria-expanded', String(open));
+    button.setAttribute('aria-label', open ? 'Close navigation menu' : 'Open navigation menu');
+  });
+
+  topbar.appendChild(button);
+}
+
+function ensureBatchNavigation() {
+  if (location.pathname !== '/batches-v2.html') return;
+
+  const title = document.querySelector('.batch-topbar h1');
+  if (title) title.textContent = 'Batch Manager';
+
+  const batchNav = document.querySelector('.batch-nav');
+  if (!batchNav || batchNav.querySelector('.section-tabs')) return;
+
+  batchNav.innerHTML = `
+    <nav class="section-tabs batch-section-tabs" aria-label="Coding dashboard sections">
+      <a href="/" class="nav-tab batch-nav-link">Submissions</a>
+      <a href="/?view=questions" class="nav-tab batch-nav-link">Questions</a>
+      <span class="nav-tab active batch-nav-link" aria-current="page">Batches</span>
+    </nav>
+  `;
+}
+
+function honorQuestionView() {
+  if (location.pathname !== '/' && location.pathname !== '/index.html') return;
+  if (new URLSearchParams(location.search).get('view') !== 'questions') return;
+
+  const questionButton = document.querySelector('[data-view="questions"]');
+  if (questionButton && !questionButton.classList.contains('active')) {
+    questionButton.click();
+    history.replaceState({}, '', '/');
+  }
+}
+
 function decorateShell() {
   document.querySelector('.batch-manager-shortcut')?.remove();
+
+  ensureBatchNavigation();
+  honorQuestionView();
+
+  const topbar = document.querySelector('.topbar');
+  ensureMobileMenu(topbar);
 
   const teacherBlock = document.querySelector('.teacher-block');
   if (teacherBlock && !document.querySelector('#theme-toggle')) {
@@ -57,6 +123,12 @@ function decorateShell() {
     link.setAttribute('aria-label', 'Manage coding batches');
     sectionTabs.appendChild(link);
   }
+
+  topbar?.querySelectorAll('.nav-tab, .manage-batches-link, .batch-nav-link').forEach((item) => {
+    if (item.dataset.mobileCloseBound) return;
+    item.dataset.mobileCloseBound = 'true';
+    item.addEventListener('click', () => closeMobileMenu(topbar));
+  });
 }
 
 applyTheme(preferredTheme());
