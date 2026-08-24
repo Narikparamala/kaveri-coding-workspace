@@ -1,5 +1,8 @@
 import { defineConfig } from 'vite';
-import { resolve } from 'path';
+import { fileURLToPath, URL } from 'node:url';
+
+const dashboardHtml = fileURLToPath(new URL('./index.html', import.meta.url));
+const batchesHtml = fileURLToPath(new URL('./batches.html', import.meta.url));
 
 export default defineConfig({
   server: {
@@ -10,8 +13,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        dashboard: resolve(__dirname, 'index.html'),
-        batches: resolve(__dirname, 'batches.html')
+        dashboard: dashboardHtml,
+        batches: batchesHtml
       }
     }
   }
