@@ -3,35 +3,8 @@ const path = require('path');
 const os = require('os');
 const { spawn } = require('child_process');
 
-const assignments = [
-  {
-    id: 'sum-1-to-n',
-    title: 'Sum of Numbers 1 to N',
-    topic: 'Loops',
-    marks: 10,
-    question: 'Write a Python program to find the sum of all numbers from 1 to N.',
-    examples: [['5', '15'], ['10', '55']],
-    tests: [['1', '1'], ['5', '15'], ['10', '55'], ['100', '5050']]
-  },
-  {
-    id: 'even-or-odd',
-    title: 'Even or Odd',
-    topic: 'Conditions',
-    marks: 10,
-    question: 'Read an integer and print Even if it is even, otherwise print Odd.',
-    examples: [['8', 'Even'], ['7', 'Odd']],
-    tests: [['8', 'Even'], ['7', 'Odd'], ['0', 'Even'], ['-3', 'Odd']]
-  },
-  {
-    id: 'reverse-number',
-    title: 'Reverse a Number',
-    topic: 'Loops',
-    marks: 10,
-    question: 'Write a Python program to reverse the digits of a positive integer.',
-    examples: [['1234', '4321'], ['500', '5']],
-    tests: [['1234', '4321'], ['500', '5'], ['7', '7'], ['1000', '1']]
-  }
-];
+let assignments = [];
+let assignmentLoader;
 
 class AssignmentItem extends vscode.TreeItem {
   constructor(assignment) {
@@ -47,14 +20,50 @@ class AssignmentItem extends vscode.TreeItem {
   }
 }
 
+class InfoItem extends vscode.TreeItem {
+  constructor(label, description, icon = 'info') {
+    super(label, vscode.TreeItemCollapsibleState.None);
+    this.description = description;
+    this.iconPath = new vscode.ThemeIcon(icon);
+  }
+}
+
 class AssignmentsProvider {
   constructor() {
     this.changeEmitter = new vscode.EventEmitter();
     this.onDidChangeTreeData = this.changeEmitter.event;
+    this.loading = false;
+    this.error = '';
   }
 
   refresh() {
     this.changeEmitter.fire();
+  }
+
+  async reload({ silent = false } = {}) {
+    if (!assignmentLoader) return;
+
+    this.loading = true;
+    this.error = '';
+    this.refresh();
+
+    try {
+      const loaded = await assignmentLoader();
+      assignments = Array.isArray(loaded) ? loaded : [];
+      if (!silent) {
+        vscode.window.showInformationMessage(
+          assignments.length
+            ? `Kaveri: ${assignments.length} published assignment${assignments.length === 1 ? '' : 's'} loaded.`
+            : 'Kaveri: No published assignments are available yet.'
+        );
+      }
+    } catch (error) {
+      this.error = error.message || String(error);
+      if (!silent) vscode.window.showErrorMessage(`Kaveri: Could not refresh assignments. ${this.error}`);
+    } finally {
+      this.loading = false;
+      this.refresh();
+    }
   }
 
   getTreeItem(item) {
@@ -62,6 +71,9 @@ class AssignmentsProvider {
   }
 
   getChildren() {
+    if (this.loading) return [new InfoItem('Loading assignments…', '', 'sync~spin')];
+    if (this.error) return [new InfoItem('Could not load assignments', 'Click refresh to retry', 'warning')];
+    if (!assignments.length) return [new InfoItem('No published assignments', 'Click refresh to check again', 'inbox')];
     return assignments.map((item) => new AssignmentItem(item));
   }
 }
@@ -70,19 +82,44 @@ function folderName(title) {
   return title.replace(/[^a-zA-Z0-9\s-]/g, '').trim().replace(/\s+/g, '-');
 }
 
-function findCurrentAssignment() {
+function kaveriRootPath() {
+  return path.join(os.homedir(), 'Documents', 'Kaveri Coding');
+}
+
+function assignmentCacheUri(folder) {
+  return vscode.Uri.file(path.join(kaveriRootPath(), '.kaveri', 'assignments', `${folder}.json`));
+}
+
+async function cacheAssignment(assignment) {
+  const folder = folderName(assignment.title);
+  const uri = assignmentCacheUri(folder);
+  await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
+  await writeText(uri, JSON.stringify(assignment, null, 2));
+}
+
+async function findCurrentAssignment() {
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) return undefined;
+
   const currentFolderName = path.basename(folder.uri.fsPath);
-  return assignments.find((assignment) => folderName(assignment.title) === currentFolderName);
+
+  try {
+    const cached = await readText(assignmentCacheUri(currentFolderName));
+    return JSON.parse(cached);
+  } catch {
+    return assignments.find((assignment) => folderName(assignment.title) === currentFolderName);
+  }
 }
 
 function questionText(a) {
-  const examples = a.examples.map((e, i) =>
-    `## Example ${i + 1}\n\nInput:\n\`\`\`text\n${e[0]}\n\`\`\`\n\nExpected Output:\n\`\`\`text\n${e[1]}\n\`\`\``
+  const examples = (a.examples || []).map((example, index) =>
+    `## Example ${index + 1}\n\nInput:\n\`\`\`text\n${example[0]}\n\`\`\`\n\nExpected Output:\n\`\`\`text\n${example[1]}\n\`\`\``
   ).join('\n\n');
 
-  return `# ${a.title}\n\n**Topic:** ${a.topic}  \n**Marks:** ${a.marks}\n\n## Question\n\n${a.question}\n\n${examples}\n\nWrite your solution in \`main.py\`.\n\n> Kaveri tests send input automatically. Use normal \`input()\`; avoid extra output unless the question asks for it.\n`;
+  const exampleBlock = examples ? `\n\n${examples}` : '';
+  const fileName = a.fileName || 'main.py';
+
+  return `# ${a.title}\n\n**Topic:** ${a.topic || 'Python'}  \n**Marks:** ${a.marks}\n\n## Question\n\n${a.question}${exampleBlock}\n\nWrite your solution in \`${fileName}\`.\n\n> Kaveri tests send input automatically. Use normal \`input()\`; avoid extra output unless the question asks for it.\n`;
 }
 
 async function writeText(uri, text) {
@@ -96,21 +133,24 @@ async function readText(uri) {
 
 async function openAssignment(a) {
   try {
-    const rootPath = path.join(os.homedir(), 'Documents', 'Kaveri Coding', 'Python', folderName(a.title));
+    const rootPath = path.join(kaveriRootPath(), 'Python', folderName(a.title));
     const folderUri = vscode.Uri.file(rootPath);
     const questionUri = vscode.Uri.joinPath(folderUri, 'question.md');
-    const mainUri = vscode.Uri.joinPath(folderUri, 'main.py');
+    const fileName = a.fileName || 'main.py';
+    const mainUri = vscode.Uri.joinPath(folderUri, fileName);
 
     await vscode.workspace.fs.createDirectory(folderUri);
     await writeText(questionUri, questionText(a));
+    await cacheAssignment(a);
 
     try {
       await vscode.workspace.fs.stat(mainUri);
     } catch {
-      await writeText(
-        mainUri,
-        `# ${a.title}\n# ${a.marks} marks\n\n# Write your solution below\n# Kaveri supplies test input automatically.\n\n`
-      );
+      const starter = String(a.starterCode || '').trim();
+      const initialCode = starter
+        ? `${starter}\n`
+        : `# ${a.title}\n# ${a.marks} marks\n\n# Write your solution below\n# Kaveri supplies test input automatically.\n\n`;
+      await writeText(mainUri, initialCode);
     }
 
     await vscode.commands.executeCommand('vscode.openFolder', folderUri, false);
@@ -120,7 +160,7 @@ async function openAssignment(a) {
 }
 
 async function openCodingFolder() {
-  const uri = vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding'));
+  const uri = vscode.Uri.file(kaveriRootPath());
   await vscode.workspace.fs.createDirectory(uri);
   await vscode.commands.executeCommand('vscode.openFolder', uri, false);
 }
@@ -145,13 +185,8 @@ function runProcess(command, args, input, cwd) {
       }
     }, 3000);
 
-    child.stdout.on('data', (data) => {
-      stdout += data.toString();
-    });
-
-    child.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    child.stdout.on('data', (data) => { stdout += data.toString(); });
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
 
     child.on('error', (error) => {
       clearTimeout(timer);
@@ -196,7 +231,7 @@ async function runPython(mainPath, input) {
 }
 
 function normalize(text) {
-  return text.replace(/\r\n/g, '\n').trim();
+  return String(text || '').replace(/\r\n/g, '\n').trim();
 }
 
 function outputMatches(actual, expected) {
@@ -218,19 +253,26 @@ function outputMatches(actual, expected) {
 }
 
 async function executeTests({ showOutput = true } = {}) {
-  const assignment = findCurrentAssignment();
+  const assignment = await findCurrentAssignment();
   if (!assignment) {
     vscode.window.showWarningMessage('Open a Kaveri assignment folder before running tests.');
     return undefined;
   }
 
+  const tests = Array.isArray(assignment.tests) ? assignment.tests : [];
+  if (!tests.length) {
+    vscode.window.showWarningMessage('This assignment does not have any visible tests yet.');
+    return undefined;
+  }
+
   const folder = vscode.workspace.workspaceFolders?.[0];
-  const mainUri = vscode.Uri.joinPath(folder.uri, 'main.py');
+  const fileName = assignment.fileName || 'main.py';
+  const mainUri = vscode.Uri.joinPath(folder.uri, fileName);
 
   try {
     await vscode.workspace.fs.stat(mainUri);
   } catch {
-    vscode.window.showErrorMessage('main.py was not found in this assignment.');
+    vscode.window.showErrorMessage(`${fileName} was not found in this assignment.`);
     return undefined;
   }
 
@@ -253,25 +295,18 @@ async function executeTests({ showOutput = true } = {}) {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `Kaveri: Running ${assignment.tests.length} tests...`,
+      title: `Kaveri: Running ${tests.length} tests...`,
       cancellable: false
     },
     async () => {
-      for (let i = 0; i < assignment.tests.length; i += 1) {
-        const [input, expected] = assignment.tests[i];
+      for (let i = 0; i < tests.length; i += 1) {
+        const [input, expected] = tests[i];
         let result;
 
         try {
           result = await runPython(mainUri.fsPath, input);
         } catch (error) {
-          results.push({
-            testNumber: i + 1,
-            input,
-            expected,
-            passed: false,
-            error: error.message
-          });
-
+          results.push({ testNumber: i + 1, input, expected, passed: false, error: error.message });
           if (output) {
             output.appendLine(`❌ Test ${i + 1} — COULD NOT RUN`);
             output.appendLine(`   ${error.message}`);
@@ -303,9 +338,7 @@ async function executeTests({ showOutput = true } = {}) {
             output.appendLine('   Received: TIME LIMIT EXCEEDED (3 seconds)');
           } else if (result.stderr.trim()) {
             output.appendLine('   Python error:');
-            for (const line of normalize(result.stderr).split('\n')) {
-              output.appendLine(`   ${line}`);
-            }
+            for (const line of normalize(result.stderr).split('\n')) output.appendLine(`   ${line}`);
           } else {
             output.appendLine(`   Received: ${received || '(no output)'}`);
           }
@@ -318,21 +351,16 @@ async function executeTests({ showOutput = true } = {}) {
 
   if (output) {
     output.appendLine('================================');
-    output.appendLine(`Result: ${passed}/${assignment.tests.length} tests passed`);
-
-    if (passed === assignment.tests.length) {
-      output.appendLine('🎉 ALL VISIBLE TESTS PASSED');
-    } else {
-      output.appendLine('Fix the failed tests and run again.');
-    }
+    output.appendLine(`Result: ${passed}/${tests.length} tests passed`);
+    output.appendLine(passed === tests.length ? '🎉 ALL VISIBLE TESTS PASSED' : 'Fix the failed tests and run again.');
   }
 
   return {
     assignment,
     mainUri,
     passed,
-    total: assignment.tests.length,
-    allPassed: passed === assignment.tests.length,
+    total: tests.length,
+    allPassed: passed === tests.length,
     results
   };
 }
@@ -376,7 +404,6 @@ async function submitAnswer(context) {
       { modal: true },
       'Submit Anyway'
     );
-
     if (choice !== 'Submit Anyway') return;
   }
 
@@ -388,13 +415,14 @@ async function submitAnswer(context) {
   const provisionalScore = Math.round((testRun.passed / testRun.total) * testRun.assignment.marks * 100) / 100;
 
   const submission = {
-    version: 1,
+    version: 2,
     status: 'local_pending_server_upload',
     studentName,
     assignmentId: testRun.assignment.id,
+    assignmentDatabaseId: testRun.assignment.databaseId || null,
     assignmentTitle: testRun.assignment.title,
-    language: 'python',
-    fileName: 'main.py',
+    language: testRun.assignment.language || 'python',
+    fileName: testRun.assignment.fileName || 'main.py',
     code,
     visibleTestsPassed: testRun.passed,
     visibleTestsTotal: testRun.total,
@@ -404,7 +432,7 @@ async function submitAnswer(context) {
     testResults: testRun.results
   };
 
-  const rootUri = vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding', '.kaveri', 'submissions'));
+  const rootUri = vscode.Uri.file(path.join(kaveriRootPath(), '.kaveri', 'submissions'));
   await vscode.workspace.fs.createDirectory(rootUri);
 
   const timestamp = submittedAt.replace(/[:.]/g, '-');
@@ -422,9 +450,9 @@ async function submitAnswer(context) {
   }
 }
 
-function activate(context) {
+function activate(context, options = {}) {
+  assignmentLoader = options.loadAssignments;
   const provider = new AssignmentsProvider();
-  const currentAssignment = findCurrentAssignment();
 
   const testStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   testStatus.text = '$(beaker) Kaveri Tests';
@@ -434,23 +462,27 @@ function activate(context) {
   const submitStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   submitStatus.text = '$(cloud-upload) Kaveri Submit';
   submitStatus.tooltip = 'Submit this Kaveri assignment attempt';
-  submitStatus.command = 'kaveri.submitAnswer';
-
-  if (currentAssignment) {
-    testStatus.show();
-    submitStatus.show();
-  }
+  submitStatus.command = 'kaveri.submitOnline';
 
   context.subscriptions.push(
     testStatus,
     submitStatus,
     vscode.window.registerTreeDataProvider('kaveri.assignments', provider),
-    vscode.commands.registerCommand('kaveri.refreshAssignments', () => provider.refresh()),
+    vscode.commands.registerCommand('kaveri.refreshAssignments', () => provider.reload()),
     vscode.commands.registerCommand('kaveri.openAssignment', openAssignment),
     vscode.commands.registerCommand('kaveri.openWorkspaceFolder', openCodingFolder),
     vscode.commands.registerCommand('kaveri.runTests', runTests),
     vscode.commands.registerCommand('kaveri.submitAnswer', () => submitAnswer(context))
   );
+
+  findCurrentAssignment().then((currentAssignment) => {
+    if (currentAssignment) {
+      testStatus.show();
+      submitStatus.show();
+    } else if (assignmentLoader) {
+      provider.reload({ silent: true });
+    }
+  });
 }
 
 function deactivate() {}
