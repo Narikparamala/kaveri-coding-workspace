@@ -1,5 +1,7 @@
 .batch-shell { padding-bottom: 72px; }
 .batch-topbar { align-items: flex-start; }
+.batch-topbar h1 { font-size: 0; }
+.batch-topbar h1::after { content: "Batch Manager"; font-size: clamp(24px, 3vw, 32px); line-height: 1.2; }
 .batch-nav { margin-top: 12px; }
 .nav-link { display: inline-flex; text-decoration: none; align-items: center; }
 
