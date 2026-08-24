@@ -4,7 +4,19 @@ import './batches.css';
 
 const SUPABASE_URL = 'https://atcncxckuokjarsxckwy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_A5ARKVkEnJVtGV0mxrdtyw_3YmLQ4nu';
-const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// This dashboard runs locally and can be opened in several browser tabs while Vite
+// hot-reloads. Avoid cross-tab Web Lock deadlocks by running auth work directly.
+const directLock = async (_name, _acquireTimeout, fn) => await fn();
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    lock: directLock
+  }
+});
 
 const app = document.querySelector('#app');
 
@@ -16,12 +28,13 @@ const state = {
   memberships: [],
   assignments: [],
   targets: [],
-  loading: true,
   error: ''
 };
 
-let pageLoadInFlight = false;
-let initialPageLoadComplete = false;
+function log(step, detail = '') {
+  const suffix = detail ? ` — ${detail}` : '';
+  console.log(`[Kaveri Batch Manager] ${step}${suffix}`);
+}
 
 function esc(value = '') {
   return String(value)
@@ -30,6 +43,17 @@ function esc(value = '') {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
+}
+
+function renderLoading(message = 'Loading batches…') {
+  app.innerHTML = `
+    <main class="login-shell">
+      <section class="login-card loading-card">
+        <div class="spinner"></div>
+        <h2>${esc(message)}</h2>
+        <p class="fineprint">Open the browser console to see Kaveri load steps.</p>
+      </section>
+    </main>`;
 }
 
 function renderLogin() {
@@ -46,9 +70,10 @@ function renderLogin() {
     </main>`;
 
   document.querySelector('#google-login').addEventListener('click', async () => {
+    log('Starting Google sign-in');
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin + '/batches.html' }
+      options: { redirectTo: `${window.location.origin}/batches.html` }
     });
     if (error) alert(error.message);
   });
@@ -64,17 +89,8 @@ function renderDenied() {
         <button id="logout" class="secondary wide">Sign out</button>
       </section>
     </main>`;
-  document.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
-}
 
-function renderLoading() {
-  app.innerHTML = `
-    <main class="login-shell">
-      <section class="login-card loading-card">
-        <div class="spinner"></div>
-        <h2>Loading batches…</h2>
-      </section>
-    </main>`;
+  document.querySelector('#logout').addEventListener('click', logout);
 }
 
 function renderError() {
@@ -87,26 +103,37 @@ function renderError() {
         <button id="retry" class="primary wide">Retry</button>
       </section>
     </main>`;
-  document.querySelector('#retry').addEventListener('click', () => loadPage({ force: true }));
+  document.querySelector('#retry').addEventListener('click', loadPage);
 }
 
 function activeMemberships(batchId) {
-  return state.memberships.filter((m) => m.batch_id === batchId && m.status === 'active');
+  return state.memberships.filter((membership) => membership.batch_id === batchId && membership.status === 'active');
 }
 
 function studentById(id) {
-  return state.students.find((s) => s.id === id);
+  return state.students.find((student) => student.id === id);
 }
 
 function targetBatchIds(assignmentId) {
-  return state.targets.filter((t) => t.assignment_id === assignmentId).map((t) => t.batch_id);
+  return state.targets
+    .filter((target) => target.assignment_id === assignmentId)
+    .map((target) => target.batch_id);
+}
+
+function generateJoinCodeValue() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const bytes = new Uint32Array(6);
+  crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, (value) => alphabet[value % alphabet.length]).join('');
+  return `KAV-${suffix}`;
 }
 
 function batchCard(batch) {
   const members = activeMemberships(batch.id);
-  const memberIds = new Set(members.map((m) => m.student_id));
-  const available = state.students.filter((s) => !memberIds.has(s.id));
+  const memberIds = new Set(members.map((membership) => membership.student_id));
+  const available = state.students.filter((student) => !memberIds.has(student.id));
   const canDelete = state.profile?.role === 'super_admin';
+  const joinCode = batch.join_code || '';
 
   return `
     <article class="batch-card" data-batch-id="${batch.id}">
@@ -121,6 +148,17 @@ function batchCard(batch) {
         <div class="batch-card-actions">
           <span class="member-count">${members.length} student${members.length === 1 ? '' : 's'}</span>
           ${canDelete ? `<button class="delete-batch" data-batch="${batch.id}" data-name="${esc(batch.name)}" title="Delete batch">Delete batch</button>` : ''}
+        </div>
+      </div>
+
+      <div class="join-code-box">
+        <div>
+          <small>STUDENT JOIN CODE</small>
+          <strong>${joinCode ? esc(joinCode) : 'No join code generated yet'}</strong>
+        </div>
+        <div class="join-code-actions">
+          ${joinCode ? `<button class="secondary small copy-code" data-code="${esc(joinCode)}">Copy code</button>` : ''}
+          <button class="secondary small generate-code" data-batch="${batch.id}">${joinCode ? 'New code' : 'Generate code'}</button>
         </div>
       </div>
 
@@ -196,8 +234,8 @@ function renderPage() {
       <section class="batch-metrics">
         <article class="metric-card"><span>Batches</span><strong>${state.batches.length}</strong></article>
         <article class="metric-card"><span>Student accounts</span><strong>${state.students.length}</strong></article>
-        <article class="metric-card"><span>Published questions</span><strong>${state.assignments.filter((a) => a.is_published).length}</strong></article>
-        <article class="metric-card"><span>Targeted questions</span><strong>${new Set(state.targets.map((t) => t.assignment_id)).size}</strong></article>
+        <article class="metric-card"><span>Published questions</span><strong>${state.assignments.filter((assignment) => assignment.is_published).length}</strong></article>
+        <article class="metric-card"><span>Targeted questions</span><strong>${new Set(state.targets.map((target) => target.assignment_id)).size}</strong></article>
       </section>
 
       ${canCreateBatch ? `
@@ -218,7 +256,7 @@ function renderPage() {
       <section class="batch-section">
         <div class="section-heading">
           <div><p class="eyebrow">Students</p><h2>Batch membership</h2></div>
-          <p class="muted">Students must have a Kaveri account before you can enroll them.</p>
+          <p class="muted">Students can be added here manually or join themselves with the batch code.</p>
         </div>
         <div class="batch-grid">
           ${state.batches.length ? state.batches.map(batchCard).join('') : `<section class="panel empty-batches"><h3>No batches yet</h3><p class="muted">Create your first batch above, then add students.</p></section>`}
@@ -231,21 +269,30 @@ function renderPage() {
           <p class="muted">No selection means everyone. Selecting batches restricts the question to those students.</p>
         </div>
         <div class="delivery-grid">
-          ${state.assignments.filter((a) => a.is_published).length
-            ? state.assignments.filter((a) => a.is_published).map(assignmentRow).join('')
+          ${state.assignments.filter((assignment) => assignment.is_published).length
+            ? state.assignments.filter((assignment) => assignment.is_published).map(assignmentRow).join('')
             : `<section class="panel empty-batches"><h3>No published questions</h3><p class="muted">Publish a question from the Question Bank first.</p></section>`}
         </div>
       </section>
     </div>`;
 
-  document.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
+  document.querySelector('#logout').addEventListener('click', logout);
   document.querySelector('#refresh').addEventListener('click', loadData);
-
   document.querySelector('#create-batch-form')?.addEventListener('submit', createBatch);
   document.querySelectorAll('.add-student').forEach((button) => button.addEventListener('click', addStudent));
   document.querySelectorAll('.remove-student').forEach((button) => button.addEventListener('click', removeStudent));
   document.querySelectorAll('.delete-batch').forEach((button) => button.addEventListener('click', deleteBatch));
+  document.querySelectorAll('.generate-code').forEach((button) => button.addEventListener('click', generateCode));
+  document.querySelectorAll('.copy-code').forEach((button) => button.addEventListener('click', copyCode));
   document.querySelectorAll('.target-checkbox').forEach((checkbox) => checkbox.addEventListener('change', toggleTarget));
+}
+
+async function logout() {
+  log('Signing out');
+  await supabase.auth.signOut();
+  state.session = null;
+  state.profile = null;
+  renderLogin();
 }
 
 async function createBatch(event) {
@@ -275,14 +322,50 @@ async function createBatch(event) {
   await loadData();
 }
 
+async function generateCode(event) {
+  const button = event.currentTarget;
+  const batchId = button.dataset.batch;
+  const code = generateJoinCodeValue();
+  button.disabled = true;
+  button.textContent = 'Generating…';
+
+  const { error } = await supabase
+    .from('batches')
+    .update({ join_code: code, updated_at: new Date().toISOString() })
+    .eq('id', batchId);
+
+  if (error) {
+    button.disabled = false;
+    button.textContent = 'Generate code';
+    return alert(error.message);
+  }
+
+  await loadData();
+}
+
+async function copyCode(event) {
+  const code = event.currentTarget.dataset.code;
+  try {
+    await navigator.clipboard.writeText(code);
+    const original = event.currentTarget.textContent;
+    event.currentTarget.textContent = 'Copied!';
+    setTimeout(() => {
+      event.currentTarget.textContent = original;
+    }, 1200);
+  } catch {
+    window.prompt('Copy this batch code:', code);
+  }
+}
+
 async function addStudent(event) {
   const batchId = event.currentTarget.dataset.batch;
   const select = document.querySelector(`.student-select[data-batch="${batchId}"]`);
   const studentId = select?.value;
   if (!studentId) return;
 
-  const existing = state.memberships.find((m) => m.batch_id === batchId && m.student_id === studentId);
+  const existing = state.memberships.find((membership) => membership.batch_id === batchId && membership.student_id === studentId);
   let error;
+
   if (existing) {
     ({ error } = await supabase.from('batch_students').update({ status: 'active' }).eq('id', existing.id));
   } else {
@@ -296,7 +379,7 @@ async function addStudent(event) {
 async function removeStudent(event) {
   const batchId = event.currentTarget.dataset.batch;
   const studentId = event.currentTarget.dataset.student;
-  const membership = state.memberships.find((m) => m.batch_id === batchId && m.student_id === studentId && m.status === 'active');
+  const membership = state.memberships.find((item) => item.batch_id === batchId && item.student_id === studentId && item.status === 'active');
   if (!membership) return;
 
   const { error } = await supabase.from('batch_students').update({ status: 'inactive' }).eq('id', membership.id);
@@ -370,83 +453,101 @@ async function toggleTarget(event) {
 
 async function loadData() {
   try {
-    const [batchesRes, studentsRes, membershipsRes, assignmentsRes, targetsRes] = await Promise.all([
-      supabase.from('batches').select('id,name,description,status,max_students,created_at,updated_at').order('created_at'),
-      supabase.from('profiles').select('id,email,full_name,role,is_active').eq('role', 'student').eq('is_active', true).order('full_name'),
-      supabase.from('batch_students').select('id,batch_id,student_id,status,enrolled_at'),
-      supabase.from('coding_vscode_assignments').select('id,assignment_key,title,is_published,updated_at').order('title'),
-      supabase.from('coding_vscode_assignment_batches').select('id,assignment_id,batch_id,created_at')
-    ]);
+    log('Loading batches');
+    const batchesRes = await supabase
+      .from('batches')
+      .select('id,name,description,status,max_students,join_code,created_at,updated_at')
+      .order('created_at');
+    if (batchesRes.error) throw batchesRes.error;
 
-    for (const response of [batchesRes, studentsRes, membershipsRes, assignmentsRes, targetsRes]) {
-      if (response.error) throw response.error;
-    }
+    log('Loading student accounts');
+    const studentsRes = await supabase
+      .from('profiles')
+      .select('id,email,full_name,role,is_active')
+      .eq('role', 'student')
+      .eq('is_active', true)
+      .order('full_name');
+    if (studentsRes.error) throw studentsRes.error;
+
+    log('Loading memberships');
+    const membershipsRes = await supabase
+      .from('batch_students')
+      .select('id,batch_id,student_id,status,enrolled_at');
+    if (membershipsRes.error) throw membershipsRes.error;
+
+    log('Loading assignments');
+    const assignmentsRes = await supabase
+      .from('coding_vscode_assignments')
+      .select('id,assignment_key,title,is_published,updated_at')
+      .order('title');
+    if (assignmentsRes.error) throw assignmentsRes.error;
+
+    log('Loading assignment targets');
+    const targetsRes = await supabase
+      .from('coding_vscode_assignment_batches')
+      .select('id,assignment_id,batch_id,created_at');
+    if (targetsRes.error) throw targetsRes.error;
 
     state.batches = batchesRes.data || [];
     state.students = studentsRes.data || [];
     state.memberships = membershipsRes.data || [];
     state.assignments = assignmentsRes.data || [];
     state.targets = targetsRes.data || [];
+
+    log('Rendering Batch Manager', `${state.batches.length} batches`);
     renderPage();
   } catch (error) {
+    console.error('[Kaveri Batch Manager] loadData failed', error);
     state.error = error.message || String(error);
     renderError();
   }
 }
 
-async function loadPage({ force = false } = {}) {
-  if (pageLoadInFlight && !force) return;
-  pageLoadInFlight = true;
-  state.loading = true;
-  renderLoading();
+async function loadPage() {
+  renderLoading('Checking teacher session…');
+  log('STEP 1: Reading Supabase session');
 
   try {
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    const { data, error: sessionError } = await supabase.auth.getSession();
     if (sessionError) throw sessionError;
+
+    const session = data?.session || null;
     state.session = session;
+    log('STEP 1 complete', session ? session.user.email : 'no session');
 
     if (!session) {
-      state.profile = null;
       renderLogin();
       return;
     }
 
-    const { data: profile, error } = await supabase
+    renderLoading('Loading teacher profile…');
+    log('STEP 2: Loading teacher profile');
+
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('id,email,full_name,role,is_active')
       .eq('id', session.user.id)
       .maybeSingle();
-    if (error) throw error;
 
+    if (profileError) throw profileError;
     state.profile = profile;
+    log('STEP 2 complete', profile?.role || 'profile missing');
+
     if (!profile || profile.is_active === false || !['faculty', 'super_admin'].includes(profile.role)) {
       renderDenied();
       return;
     }
 
+    renderLoading('Loading batch data…');
     await loadData();
   } catch (error) {
+    console.error('[Kaveri Batch Manager] startup failed', error);
     state.error = error.message || String(error);
     renderError();
-  } finally {
-    pageLoadInFlight = false;
-    initialPageLoadComplete = true;
   }
 }
 
-supabase.auth.onAuthStateChange((event) => {
-  if (!initialPageLoadComplete) return;
-
-  if (event === 'SIGNED_OUT') {
-    state.session = null;
-    state.profile = null;
-    renderLogin();
-    return;
-  }
-
-  if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-    setTimeout(() => loadPage(), 0);
-  }
-});
-
+// Intentionally no onAuthStateChange subscription here. OAuth returns by reloading
+// this page, and manual refresh/sign-out are explicit. This avoids Vite HMR creating
+// duplicate auth listeners during local development.
 loadPage();
