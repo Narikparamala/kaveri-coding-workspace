@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const path = require('path');
 const os = require('os');
 const core = require('./extension');
-const { signIn, signOut, uploadSubmission } = require('./supabase');
+const { signIn, signOut, ensureSession, uploadSubmission } = require('./supabase');
 
 function submissionsRootUri() {
   return vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding', '.kaveri', 'submissions'));
@@ -44,8 +44,17 @@ async function latestSubmission() {
 }
 
 async function submitOnline(context) {
-  const before = await latestSubmission();
+  const session = await ensureSession(context);
+  if (!session) return;
 
+  const accountName = session.profile?.full_name
+    || session.user?.user_metadata?.full_name
+    || session.user?.email
+    || 'Student';
+
+  await context.globalState.update('kaveri.studentName', accountName);
+
+  const before = await latestSubmission();
   await vscode.commands.executeCommand('kaveri.submitAnswer');
 
   const after = await latestSubmission();
@@ -67,6 +76,7 @@ async function submitOnline(context) {
 
     const uploaded = {
       ...localSubmission,
+      studentName: accountName,
       status: 'server_uploaded',
       serverSubmissionId: serverRow.id,
       serverUploadedAt: new Date().toISOString()
@@ -79,6 +89,7 @@ async function submitOnline(context) {
   } catch (error) {
     const pending = {
       ...localSubmission,
+      studentName: accountName,
       status: 'local_pending_server_upload',
       uploadError: error.message,
       lastUploadAttemptAt: new Date().toISOString()
