@@ -1,10 +1,13 @@
 const vscode = require('vscode');
 const crypto = require('crypto');
+const http = require('http');
 
 const SUPABASE_URL = 'https://atcncxckuokjarsxckwy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_A5ARKVkEnJVtGV0mxrdtyw_3YmLQ4nu';
 const SESSION_SECRET = 'kaveri.supabaseSession.v1';
 const OAUTH_STATE_KEY = 'kaveri.googleOAuthState.v1';
+const LOCAL_AUTH_HOST = '127.0.0.1';
+const LOCAL_AUTH_PORT = 54321;
 
 let pendingOAuth;
 
@@ -37,16 +40,6 @@ async function authRequest(path, body) {
     body: JSON.stringify(body)
   });
 
-  return parseResponse(response);
-}
-
-async function fetchAuthUser(accessToken) {
-  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${accessToken}`
-    }
-  });
   return parseResponse(response);
 }
 
@@ -112,9 +105,33 @@ async function refreshSession(context, session) {
   }
 }
 
+function base64Url(buffer) {
+  return buffer
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+function createPkcePair() {
+  const verifier = base64Url(crypto.randomBytes(48));
+  const challenge = base64Url(crypto.createHash('sha256').update(verifier).digest());
+  return { verifier, challenge };
+}
+
+function closeServer(server) {
+  if (!server) return;
+  try {
+    server.close();
+  } catch {
+    // Ignore shutdown errors.
+  }
+}
+
 function finishPendingOAuth(error, session) {
   if (!pendingOAuth) return;
   clearTimeout(pendingOAuth.timer);
+  closeServer(pendingOAuth.server);
   const { resolve, reject } = pendingOAuth;
   pendingOAuth = undefined;
   if (error) reject(error);
@@ -124,6 +141,7 @@ function finishPendingOAuth(error, session) {
 async function cancelPendingOAuth(context) {
   if (pendingOAuth) {
     clearTimeout(pendingOAuth.timer);
+    closeServer(pendingOAuth.server);
     const { resolve } = pendingOAuth;
     pendingOAuth = undefined;
     resolve(undefined);
@@ -131,70 +149,45 @@ async function cancelPendingOAuth(context) {
   await context.globalState.update(OAUTH_STATE_KEY, undefined);
 }
 
-async function handleAuthUri(context, uri) {
-  if (uri.path !== '/auth-callback') return;
+function authPage(title, message, success) {
+  const symbol = success ? '✅' : '❌';
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#0f172a; color:#e2e8f0; display:grid; place-items:center; min-height:100vh; margin:0; }
+    main { max-width:560px; padding:32px; background:#111827; border:1px solid #334155; border-radius:18px; text-align:center; }
+    h1 { margin-top:0; }
+    p { color:#cbd5e1; line-height:1.6; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${symbol} ${title}</h1>
+    <p>${message}</p>
+    <p>You can close this browser tab and return to VS Code.</p>
+  </main>
+</body>
+</html>`;
+}
 
-  const query = new URLSearchParams(uri.query || '');
-  const fragment = new URLSearchParams(uri.fragment || '');
-  const expectedState = context.globalState.get(OAUTH_STATE_KEY);
-  const receivedState = query.get('state');
-
-  const oauthError = fragment.get('error_description')
-    || query.get('error_description')
-    || fragment.get('error')
-    || query.get('error');
-
-  if (oauthError) {
-    await context.globalState.update(OAUTH_STATE_KEY, undefined);
-    finishPendingOAuth(new Error(oauthError));
-    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${oauthError}`);
-    return;
-  }
-
-  if (!expectedState || receivedState !== expectedState) {
-    const error = new Error('The Google sign-in response could not be verified. Please try again.');
-    finishPendingOAuth(error);
-    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
-    return;
-  }
-
-  const accessToken = fragment.get('access_token') || query.get('access_token');
-  const refreshToken = fragment.get('refresh_token') || query.get('refresh_token');
-  const expiresIn = fragment.get('expires_in') || query.get('expires_in') || '3600';
-
-  if (!accessToken) {
-    const error = new Error('Google sign-in returned without a Supabase access token.');
-    finishPendingOAuth(error);
-    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
-    return;
-  }
-
-  try {
-    const user = await fetchAuthUser(accessToken);
-    const profile = await fetchProfile(accessToken, user.id);
-    const session = normalizeSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_in: Number(expiresIn),
-      user
-    }, profile);
-
-    await saveSession(context, session);
-    await context.globalState.update(OAUTH_STATE_KEY, undefined);
-
-    const displayName = profile?.full_name
-      || user?.user_metadata?.full_name
-      || user?.user_metadata?.name
-      || user?.email
-      || 'Kaveri user';
-
-    vscode.window.showInformationMessage(`Kaveri: Signed in with Google as ${displayName}.`);
-    finishPendingOAuth(undefined, session);
-  } catch (error) {
-    await context.globalState.update(OAUTH_STATE_KEY, undefined);
-    finishPendingOAuth(error);
-    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
-  }
+function listen(server) {
+  return new Promise((resolve, reject) => {
+    const onError = (error) => {
+      server.off('listening', onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off('error', onError);
+      resolve();
+    };
+    server.once('error', onError);
+    server.once('listening', onListening);
+    server.listen(LOCAL_AUTH_PORT, LOCAL_AUTH_HOST);
+  });
 }
 
 async function signIn(context) {
@@ -202,6 +195,7 @@ async function signIn(context) {
   if (existing?.access_token && existing.expires_at > Date.now()) {
     const displayName = existing.profile?.full_name
       || existing.user?.user_metadata?.full_name
+      || existing.user?.user_metadata?.name
       || existing.user?.email
       || 'Kaveri user';
     vscode.window.showInformationMessage(`Kaveri: Already signed in as ${displayName}.`);
@@ -220,10 +214,10 @@ async function signIn(context) {
   }
 
   const state = crypto.randomBytes(24).toString('hex');
+  const { verifier, challenge } = createPkcePair();
+  const callbackPath = `/auth-callback/${state}`;
+  const callbackUrl = `http://${LOCAL_AUTH_HOST}:${LOCAL_AUTH_PORT}${callbackPath}`;
   await context.globalState.update(OAUTH_STATE_KEY, state);
-
-  const callbackUri = `${vscode.env.uriScheme}://kaveritechnologies.kaveri-coding/auth-callback?state=${encodeURIComponent(state)}`;
-  const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUri)}`;
 
   let resolvePromise;
   let rejectPromise;
@@ -232,8 +226,79 @@ async function signIn(context) {
     rejectPromise = reject;
   });
 
+  const server = http.createServer(async (req, res) => {
+    const requestUrl = new URL(req.url || '/', `http://${LOCAL_AUTH_HOST}:${LOCAL_AUTH_PORT}`);
+
+    if (requestUrl.pathname !== callbackPath) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('Not found');
+      return;
+    }
+
+    const oauthError = requestUrl.searchParams.get('error_description') || requestUrl.searchParams.get('error');
+    if (oauthError) {
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(authPage('Kaveri sign-in failed', oauthError, false));
+      await context.globalState.update(OAUTH_STATE_KEY, undefined);
+      finishPendingOAuth(new Error(oauthError));
+      return;
+    }
+
+    const code = requestUrl.searchParams.get('code');
+    if (!code) {
+      const error = new Error('Google sign-in returned without an authorization code.');
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(authPage('Kaveri sign-in failed', error.message, false));
+      await context.globalState.update(OAUTH_STATE_KEY, undefined);
+      finishPendingOAuth(error);
+      return;
+    }
+
+    try {
+      const data = await authRequest('/auth/v1/token?grant_type=pkce', {
+        auth_code: code,
+        code_verifier: verifier
+      });
+
+      const profile = await fetchProfile(data.access_token, data.user.id);
+      const session = normalizeSession(data, profile);
+      await saveSession(context, session);
+      await context.globalState.update(OAUTH_STATE_KEY, undefined);
+
+      const displayName = profile?.full_name
+        || data.user?.user_metadata?.full_name
+        || data.user?.user_metadata?.name
+        || data.user?.email
+        || 'Kaveri user';
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(authPage('Kaveri sign-in complete', `Signed in as ${displayName}.`, true));
+      vscode.window.showInformationMessage(`Kaveri: Signed in with Google as ${displayName}.`);
+      finishPendingOAuth(undefined, session);
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(authPage('Kaveri sign-in failed', error.message, false));
+      await context.globalState.update(OAUTH_STATE_KEY, undefined);
+      finishPendingOAuth(error);
+      vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
+    }
+  });
+
+  try {
+    await listen(server);
+  } catch (error) {
+    closeServer(server);
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    const message = error.code === 'EADDRINUSE'
+      ? `Port ${LOCAL_AUTH_PORT} is already in use. Close the other Kaveri sign-in attempt and try again.`
+      : error.message;
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${message}`);
+    return undefined;
+  }
+
   const timer = setTimeout(async () => {
     if (!pendingOAuth) return;
+    closeServer(server);
     pendingOAuth = undefined;
     await context.globalState.update(OAUTH_STATE_KEY, undefined);
     rejectPromise(new Error('Google sign-in timed out. Please try again.'));
@@ -243,14 +308,15 @@ async function signIn(context) {
     promise,
     resolve: resolvePromise,
     reject: rejectPromise,
-    timer
+    timer,
+    server
   };
 
+  const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUrl)}&code_challenge=${encodeURIComponent(challenge)}&code_challenge_method=s256`;
   const opened = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+
   if (!opened) {
-    clearTimeout(timer);
-    pendingOAuth = undefined;
-    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    await cancelPendingOAuth(context);
     vscode.window.showErrorMessage('Kaveri could not open the Google sign-in page in your browser.');
     return undefined;
   }
@@ -354,6 +420,5 @@ module.exports = {
   signIn,
   signOut,
   ensureSession,
-  uploadSubmission,
-  handleAuthUri
+  uploadSubmission
 };
