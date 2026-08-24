@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -10,7 +10,7 @@
   "categories": [
     "Education"
   ],
-  "main": "./extension.js",
+  "main": "./server-extension.js",
   "contributes": {
     "commands": [
       {
@@ -32,8 +32,21 @@
       },
       {
         "command": "kaveri.submitAnswer",
+        "title": "Kaveri: Save Submission Locally"
+      },
+      {
+        "command": "kaveri.submitOnline",
         "title": "Kaveri: Submit Answer",
         "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "kaveri.signIn",
+        "title": "Kaveri: Sign In",
+        "icon": "$(account)"
+      },
+      {
+        "command": "kaveri.signOut",
+        "title": "Kaveri: Sign Out"
       }
     ],
     "viewsContainers": {
@@ -56,14 +69,19 @@
     "menus": {
       "view/title": [
         {
+          "command": "kaveri.signIn",
+          "when": "view == kaveri.assignments",
+          "group": "navigation@1"
+        },
+        {
           "command": "kaveri.refreshAssignments",
           "when": "view == kaveri.assignments",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "kaveri.openWorkspaceFolder",
           "when": "view == kaveri.assignments",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "editor/title": [
@@ -73,7 +91,7 @@
           "group": "navigation@1"
         },
         {
-          "command": "kaveri.submitAnswer",
+          "command": "kaveri.submitOnline",
           "when": "resourceFilename == main.py",
           "group": "navigation@2"
         }
