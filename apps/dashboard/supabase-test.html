@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kaveri Coding — Supabase Test</title>
+    <style>
+      :root { font-family: Inter, system-ui, sans-serif; color: #eef6ff; background: #07111f; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+      main { width: min(900px, 100%); background: #0d1b2e; border: 1px solid #28415f; border-radius: 18px; padding: 28px; box-sizing: border-box; }
+      h1 { margin-top: 0; }
+      .status { padding: 14px 16px; border-radius: 12px; margin: 14px 0; background: #13243a; }
+      .pass { border-left: 5px solid #38d996; }
+      .fail { border-left: 5px solid #ff6b6b; }
+      .wait { border-left: 5px solid #ffbd2e; }
+      pre { background: #050b13; padding: 16px; border-radius: 12px; overflow: auto; white-space: pre-wrap; }
+      button { background: #ffbd2e; border: 0; border-radius: 10px; padding: 11px 16px; font-weight: 700; cursor: pointer; }
+      small { color: #9db3cf; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Kaveri Supabase Connection Test</h1>
+      <p>This page does not use Batch Manager code. It only checks whether this browser can reach Supabase and read published coding assignments.</p>
+      <div id="status" class="status wait">Starting test…</div>
+      <button id="run">Run test again</button>
+      <h3>Live log</h3>
+      <pre id="log"></pre>
+      <small>Expected success: HTTP 200 and at least the published coding questions.</small>
+    </main>
+    <script type="module" src="/src/supabase-test.js"></script>
+  </body>
+</html>
