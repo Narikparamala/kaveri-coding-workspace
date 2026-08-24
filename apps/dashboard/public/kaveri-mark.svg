@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Kaveri Technologies">
+  <circle cx="32" cy="28" r="22" fill="#FCD400"/>
+  <path d="M7 23C12 10 22 3 34 3c11 0 20 5 26 14" fill="none" stroke="#00AEEF" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 14h7v13l14-13h9L37 28l16 20h-9L32 33l-3 3v12h-7V14Z" fill="#ffffff"/>
+  <path d="M4 42c8-3 17-4 28-4 11 0 20 1 28 4-7 4-17 6-28 6S11 46 4 42Z" fill="#82CFFF"/>
+  <path d="M13 49c6 2 12 3 19 3s13-1 19-3c-4 5-11 8-19 8s-15-3-19-8Z" fill="#004B8D"/>
+  <path d="M22 56c3 1 7 2 10 2s7-1 10-2c-3 4-6 5-10 5s-7-1-10-5Z" fill="#003465"/>
+</svg>
