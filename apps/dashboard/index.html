@@ -5,9 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b1220" />
     <title>Kaveri Coding — Teacher Dashboard</title>
+    <style>
+      .batch-manager-shortcut {
+        position: fixed;
+        right: 18px;
+        bottom: 18px;
+        z-index: 50;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: #f0b429;
+        color: #101827;
+        font: 700 13px/1 system-ui, sans-serif;
+        text-decoration: none;
+        box-shadow: 0 10px 30px rgba(0,0,0,.28);
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <a class="batch-manager-shortcut" href="/batches.html">Manage Batches</a>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
