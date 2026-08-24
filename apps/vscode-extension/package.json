@@ -1,0 +1,64 @@
+{
+  "name": "kaveri-coding",
+  "displayName": "Kaveri Coding",
+  "description": "Kaveri Technologies coding assignments directly inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "kaveritechnologies",
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Education"
+  ],
+  "activationEvents": [
+    "onView:kaveri.assignments"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kaveri.refreshAssignments",
+        "title": "Kaveri: Refresh Assignments"
+      },
+      {
+        "command": "kaveri.openAssignment",
+        "title": "Kaveri: Open Assignment"
+      },
+      {
+        "command": "kaveri.openWorkspaceFolder",
+        "title": "Kaveri: Open Coding Folder"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kaveri-coding",
+          "title": "Kaveri Coding",
+          "icon": "resources/kaveri.svg"
+        }
+      ]
+    },
+    "views": {
+      "kaveri-coding": [
+        {
+          "id": "kaveri.assignments",
+          "name": "My Assignments"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "kaveri.refreshAssignments",
+          "when": "view == kaveri.assignments",
+          "group": "navigation"
+        },
+        {
+          "command": "kaveri.openWorkspaceFolder",
+          "when": "view == kaveri.assignments",
+          "group": "navigation"
+        }
+      ]
+    }
+  }
+}
