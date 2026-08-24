@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -87,12 +87,12 @@
       "editor/title": [
         {
           "command": "kaveri.runTests",
-          "when": "resourceFilename == main.py",
+          "when": "resourceExtname == .py",
           "group": "navigation@1"
         },
         {
           "command": "kaveri.submitOnline",
-          "when": "resourceFilename == main.py",
+          "when": "resourceExtname == .py",
           "group": "navigation@2"
         }
       ]
