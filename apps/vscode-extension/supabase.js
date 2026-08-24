@@ -121,6 +121,16 @@ function finishPendingOAuth(error, session) {
   else resolve(session);
 }
 
+async function cancelPendingOAuth(context) {
+  if (pendingOAuth) {
+    clearTimeout(pendingOAuth.timer);
+    const { resolve } = pendingOAuth;
+    pendingOAuth = undefined;
+    resolve(undefined);
+  }
+  await context.globalState.update(OAUTH_STATE_KEY, undefined);
+}
+
 async function handleAuthUri(context, uri) {
   if (uri.path !== '/auth-callback') return;
 
@@ -199,8 +209,14 @@ async function signIn(context) {
   }
 
   if (pendingOAuth) {
-    vscode.window.showInformationMessage('Kaveri: Google sign-in is already open in your browser.');
-    return pendingOAuth.promise;
+    const choice = await vscode.window.showWarningMessage(
+      'Kaveri: A previous Google sign-in is still waiting. Restart it?',
+      'Restart Sign-In',
+      'Cancel'
+    );
+
+    if (choice !== 'Restart Sign-In') return undefined;
+    await cancelPendingOAuth(context);
   }
 
   const state = crypto.randomBytes(24).toString('hex');
@@ -266,7 +282,7 @@ async function ensureSession(context) {
 
 async function signOut(context) {
   await context.secrets.delete(SESSION_SECRET);
-  await context.globalState.update(OAUTH_STATE_KEY, undefined);
+  await cancelPendingOAuth(context);
   vscode.window.showInformationMessage('Kaveri: Signed out from this VS Code installation.');
 }
 
