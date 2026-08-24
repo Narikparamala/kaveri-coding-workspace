@@ -21,19 +21,22 @@ async function runTest() {
   runButton.disabled = true;
   setStatus('Testing Supabase connection…', 'wait');
 
-  const endpoint = `${SUPABASE_URL}/rest/v1/coding_vscode_assignments?select=id,assignment_key,title,is_published&is_published=eq.true&order=title.asc&limit=10`;
-  log(`Browser JavaScript is running.`);
-  log(`Requesting published assignments from Supabase…`);
+  const endpoint = `${SUPABASE_URL}/rest/v1/rpc/kaveri_connection_health`;
+  log('Browser JavaScript is running.');
+  log('Calling Supabase health RPC…');
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
 
   try {
     const response = await fetch(endpoint, {
+      method: 'POST',
       headers: {
         apikey: SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        'Content-Type': 'application/json'
       },
+      body: '{}',
       signal: controller.signal
     });
 
@@ -42,17 +45,16 @@ async function runTest() {
 
     if (!response.ok) {
       log(`Response body: ${bodyText}`);
-      setStatus(`Supabase reachable, but request failed with HTTP ${response.status}.`, 'fail');
+      setStatus(`Supabase reachable, but health RPC failed with HTTP ${response.status}.`, 'fail');
       return;
     }
 
-    const rows = JSON.parse(bodyText || '[]');
-    log(`Supabase returned ${rows.length} published assignment(s).`);
-    for (const row of rows) {
-      log(`✓ ${row.title} (${row.assignment_key})`);
-    }
+    const data = JSON.parse(bodyText || '{}');
+    log('Supabase health RPC returned successfully.');
+    log(`Published assignments: ${data.published_assignments ?? 'unknown'}`);
+    log(`Checked at: ${data.checked_at ?? 'unknown'}`);
 
-    setStatus(`PASS — Supabase connected. ${rows.length} published assignment(s) returned.`, 'pass');
+    setStatus(`PASS — Supabase connected. ${data.published_assignments ?? 0} published assignment(s) in database.`, 'pass');
   } catch (error) {
     if (error.name === 'AbortError') {
       log('ERROR: Request timed out after 8 seconds.');
