@@ -89,6 +89,11 @@ async function writeText(uri, text) {
   await vscode.workspace.fs.writeFile(uri, Buffer.from(text, 'utf8'));
 }
 
+async function readText(uri) {
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  return Buffer.from(bytes).toString('utf8');
+}
+
 async function openAssignment(a) {
   try {
     const rootPath = path.join(os.homedir(), 'Documents', 'Kaveri Coding', 'Python', folderName(a.title));
@@ -212,11 +217,11 @@ function outputMatches(actual, expected) {
   return false;
 }
 
-async function runTests() {
+async function executeTests({ showOutput = true } = {}) {
   const assignment = findCurrentAssignment();
   if (!assignment) {
     vscode.window.showWarningMessage('Open a Kaveri assignment folder before running tests.');
-    return;
+    return undefined;
   }
 
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -226,21 +231,24 @@ async function runTests() {
     await vscode.workspace.fs.stat(mainUri);
   } catch {
     vscode.window.showErrorMessage('main.py was not found in this assignment.');
-    return;
+    return undefined;
   }
 
   await vscode.workspace.saveAll(false);
 
-  const output = vscode.window.createOutputChannel('Kaveri Test Results');
-  output.clear();
-  output.show(true);
-  output.appendLine('KAVERI CODING — TEST RESULTS');
-  output.appendLine('================================');
-  output.appendLine(`Assignment: ${assignment.title}`);
-  output.appendLine(`Marks: ${assignment.marks}`);
-  output.appendLine('');
+  const output = showOutput ? vscode.window.createOutputChannel('Kaveri Test Results') : undefined;
+  if (output) {
+    output.clear();
+    output.show(true);
+    output.appendLine('KAVERI CODING — TEST RESULTS');
+    output.appendLine('================================');
+    output.appendLine(`Assignment: ${assignment.title}`);
+    output.appendLine(`Marks: ${assignment.marks}`);
+    output.appendLine('');
+  }
 
   let passed = 0;
+  const results = [];
 
   await vscode.window.withProgress(
     {
@@ -256,67 +264,192 @@ async function runTests() {
         try {
           result = await runPython(mainUri.fsPath, input);
         } catch (error) {
-          output.appendLine(`❌ Test ${i + 1} — COULD NOT RUN`);
-          output.appendLine(`   ${error.message}`);
-          output.appendLine('');
+          results.push({
+            testNumber: i + 1,
+            input,
+            expected,
+            passed: false,
+            error: error.message
+          });
+
+          if (output) {
+            output.appendLine(`❌ Test ${i + 1} — COULD NOT RUN`);
+            output.appendLine(`   ${error.message}`);
+            output.appendLine('');
+          }
           continue;
         }
 
         const received = normalize(result.stdout);
         const ok = !result.timedOut && result.exitCode === 0 && outputMatches(result.stdout, expected);
-
         if (ok) passed += 1;
 
-        output.appendLine(`${ok ? '✅' : '❌'} Test ${i + 1} — ${ok ? 'PASS' : 'FAIL'}`);
-        output.appendLine(`   Input: ${input}`);
-        output.appendLine(`   Expected: ${expected}`);
+        results.push({
+          testNumber: i + 1,
+          input,
+          expected,
+          received,
+          passed: ok,
+          timedOut: result.timedOut,
+          stderr: normalize(result.stderr)
+        });
 
-        if (result.timedOut) {
-          output.appendLine('   Received: TIME LIMIT EXCEEDED (3 seconds)');
-        } else if (result.stderr.trim()) {
-          output.appendLine('   Python error:');
-          for (const line of normalize(result.stderr).split('\n')) {
-            output.appendLine(`   ${line}`);
+        if (output) {
+          output.appendLine(`${ok ? '✅' : '❌'} Test ${i + 1} — ${ok ? 'PASS' : 'FAIL'}`);
+          output.appendLine(`   Input: ${input}`);
+          output.appendLine(`   Expected: ${expected}`);
+
+          if (result.timedOut) {
+            output.appendLine('   Received: TIME LIMIT EXCEEDED (3 seconds)');
+          } else if (result.stderr.trim()) {
+            output.appendLine('   Python error:');
+            for (const line of normalize(result.stderr).split('\n')) {
+              output.appendLine(`   ${line}`);
+            }
+          } else {
+            output.appendLine(`   Received: ${received || '(no output)'}`);
           }
-        } else {
-          output.appendLine(`   Received: ${received || '(no output)'}`);
-        }
 
-        output.appendLine('');
+          output.appendLine('');
+        }
       }
     }
   );
 
-  output.appendLine('================================');
-  output.appendLine(`Result: ${passed}/${assignment.tests.length} tests passed`);
+  if (output) {
+    output.appendLine('================================');
+    output.appendLine(`Result: ${passed}/${assignment.tests.length} tests passed`);
 
-  if (passed === assignment.tests.length) {
-    output.appendLine('🎉 ALL VISIBLE TESTS PASSED');
-    vscode.window.showInformationMessage(`Kaveri: All ${passed}/${assignment.tests.length} tests passed!`);
+    if (passed === assignment.tests.length) {
+      output.appendLine('🎉 ALL VISIBLE TESTS PASSED');
+    } else {
+      output.appendLine('Fix the failed tests and run again.');
+    }
+  }
+
+  return {
+    assignment,
+    mainUri,
+    passed,
+    total: assignment.tests.length,
+    allPassed: passed === assignment.tests.length,
+    results
+  };
+}
+
+async function runTests() {
+  const testRun = await executeTests({ showOutput: true });
+  if (!testRun) return;
+
+  if (testRun.allPassed) {
+    vscode.window.showInformationMessage(`Kaveri: All ${testRun.passed}/${testRun.total} tests passed!`);
   } else {
-    output.appendLine('Fix the failed tests and run again.');
-    vscode.window.showWarningMessage(`Kaveri: ${passed}/${assignment.tests.length} tests passed.`);
+    vscode.window.showWarningMessage(`Kaveri: ${testRun.passed}/${testRun.total} tests passed.`);
+  }
+}
+
+async function getStudentName(context) {
+  const existing = context.globalState.get('kaveri.studentName');
+  if (existing) return existing;
+
+  const name = await vscode.window.showInputBox({
+    title: 'Kaveri Coding — Student Name',
+    prompt: 'Enter your full name. You only need to do this once on this computer.',
+    placeHolder: 'Example: Tejaswini',
+    ignoreFocusOut: true,
+    validateInput: (value) => value.trim().length < 2 ? 'Please enter your full name.' : undefined
+  });
+
+  if (!name) return undefined;
+  const cleaned = name.trim();
+  await context.globalState.update('kaveri.studentName', cleaned);
+  return cleaned;
+}
+
+async function submitAnswer(context) {
+  const testRun = await executeTests({ showOutput: true });
+  if (!testRun) return;
+
+  if (!testRun.allPassed) {
+    const choice = await vscode.window.showWarningMessage(
+      `Only ${testRun.passed}/${testRun.total} visible tests passed. Submit this attempt anyway?`,
+      { modal: true },
+      'Submit Anyway'
+    );
+
+    if (choice !== 'Submit Anyway') return;
+  }
+
+  const studentName = await getStudentName(context);
+  if (!studentName) return;
+
+  const code = await readText(testRun.mainUri);
+  const submittedAt = new Date().toISOString();
+  const provisionalScore = Math.round((testRun.passed / testRun.total) * testRun.assignment.marks * 100) / 100;
+
+  const submission = {
+    version: 1,
+    status: 'local_pending_server_upload',
+    studentName,
+    assignmentId: testRun.assignment.id,
+    assignmentTitle: testRun.assignment.title,
+    language: 'python',
+    fileName: 'main.py',
+    code,
+    visibleTestsPassed: testRun.passed,
+    visibleTestsTotal: testRun.total,
+    provisionalVisibleScore: provisionalScore,
+    maxMarks: testRun.assignment.marks,
+    submittedAt,
+    testResults: testRun.results
+  };
+
+  const rootUri = vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding', '.kaveri', 'submissions'));
+  await vscode.workspace.fs.createDirectory(rootUri);
+
+  const timestamp = submittedAt.replace(/[:.]/g, '-');
+  const fileUri = vscode.Uri.joinPath(rootUri, `${testRun.assignment.id}-${timestamp}.json`);
+  await writeText(fileUri, JSON.stringify(submission, null, 2));
+
+  const action = await vscode.window.showInformationMessage(
+    `Kaveri: Attempt saved — ${testRun.passed}/${testRun.total} visible tests passed.`,
+    'Open Submission Record'
+  );
+
+  if (action === 'Open Submission Record') {
+    const document = await vscode.workspace.openTextDocument(fileUri);
+    await vscode.window.showTextDocument(document, { preview: false });
   }
 }
 
 function activate(context) {
   const provider = new AssignmentsProvider();
-  const testStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  const currentAssignment = findCurrentAssignment();
+
+  const testStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   testStatus.text = '$(beaker) Kaveri Tests';
   testStatus.tooltip = 'Run Kaveri assignment tests';
   testStatus.command = 'kaveri.runTests';
 
-  if (findCurrentAssignment()) {
+  const submitStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  submitStatus.text = '$(cloud-upload) Kaveri Submit';
+  submitStatus.tooltip = 'Submit this Kaveri assignment attempt';
+  submitStatus.command = 'kaveri.submitAnswer';
+
+  if (currentAssignment) {
     testStatus.show();
+    submitStatus.show();
   }
 
   context.subscriptions.push(
     testStatus,
+    submitStatus,
     vscode.window.registerTreeDataProvider('kaveri.assignments', provider),
     vscode.commands.registerCommand('kaveri.refreshAssignments', () => provider.refresh()),
     vscode.commands.registerCommand('kaveri.openAssignment', openAssignment),
     vscode.commands.registerCommand('kaveri.openWorkspaceFolder', openCodingFolder),
-    vscode.commands.registerCommand('kaveri.runTests', runTests)
+    vscode.commands.registerCommand('kaveri.runTests', runTests),
+    vscode.commands.registerCommand('kaveri.submitAnswer', () => submitAnswer(context))
   );
 }
 
