@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -10,7 +10,14 @@
   "categories": [
     "Education"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Narikparamala/kaveri-coding-workspace.git"
+  },
   "main": "./server-extension.js",
+  "scripts": {
+    "package": "npx @vscode/vsce package --out kaveri-coding.vsix"
+  },
   "contributes": {
     "commands": [
       {
