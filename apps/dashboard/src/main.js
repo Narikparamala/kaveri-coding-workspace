@@ -11,7 +11,10 @@ const state = {
   session: null,
   profile: null,
   submissions: [],
+  questions: [],
+  view: 'submissions',
   search: '',
+  questionSearch: '',
   status: 'all',
   assignment: 'all',
   selectedId: null,
@@ -34,6 +37,15 @@ function formatDate(value) {
     dateStyle: 'medium',
     timeStyle: 'short'
   }).format(new Date(value));
+}
+
+function slugify(value) {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
 }
 
 function scoreLabel(row) {
@@ -78,11 +90,20 @@ function filteredRows() {
   });
 }
 
+function filteredQuestions() {
+  const query = state.questionSearch.trim().toLowerCase();
+  if (!query) return state.questions;
+  return state.questions.filter((question) => [
+    question.title,
+    question.assignment_key,
+    question.topic,
+    question.question
+  ].some((value) => String(value || '').toLowerCase().includes(query)));
+}
+
 function assignmentOptions() {
   const map = new Map();
-  for (const row of state.submissions) {
-    map.set(row.assignment_key, row.assignment_title);
-  }
+  for (const row of state.submissions) map.set(row.assignment_key, row.assignment_title);
   return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
 }
 
@@ -99,6 +120,15 @@ function dashboardMetrics() {
   };
 }
 
+function questionMetrics() {
+  return {
+    total: state.questions.length,
+    published: state.questions.filter((q) => q.is_published).length,
+    drafts: state.questions.filter((q) => !q.is_published).length,
+    hiddenTests: state.questions.reduce((sum, q) => sum + q.tests.filter((t) => t.is_hidden).length, 0)
+  };
+}
+
 function renderLogin() {
   app.innerHTML = `
     <main class="login-shell">
@@ -106,7 +136,7 @@ function renderLogin() {
         <div class="brand-mark">K</div>
         <p class="eyebrow">Kaveri Technologies</p>
         <h1>Coding Teacher Dashboard</h1>
-        <p class="muted">Review VS Code submissions, test results, marks and feedback from one place.</p>
+        <p class="muted">Create coding questions, review VS Code submissions, test results, marks and feedback from one place.</p>
         <button id="google-login" class="primary wide">Continue with Google</button>
         <p class="fineprint">Use your Kaveri faculty or super-admin Google account.</p>
       </section>
@@ -162,28 +192,63 @@ function renderLoading() {
   `;
 }
 
-function renderDashboard() {
+function headerHtml(title) {
+  const profileName = state.profile?.full_name || state.profile?.email || 'Teacher';
+  return `
+    <header class="topbar">
+      <div class="topbar-left">
+        <div>
+          <p class="eyebrow">Kaveri Technologies</p>
+          <h1>${escapeHtml(title)}</h1>
+        </div>
+        <nav class="section-tabs" aria-label="Coding dashboard sections">
+          <button class="nav-tab ${state.view === 'submissions' ? 'active' : ''}" data-view="submissions">Submissions</button>
+          <button class="nav-tab ${state.view === 'questions' ? 'active' : ''}" data-view="questions">Questions</button>
+        </nav>
+      </div>
+      <div class="teacher-block">
+        <div class="teacher-copy">
+          <strong>${escapeHtml(profileName)}</strong>
+          <span>${escapeHtml(state.profile?.role || '')}</span>
+        </div>
+        <button id="refresh" class="icon-button" title="Refresh">↻</button>
+        <button id="logout" class="secondary small">Sign out</button>
+      </div>
+    </header>
+  `;
+}
+
+function bindCommonHeader() {
+  document.querySelector('#logout')?.addEventListener('click', () => supabase.auth.signOut());
+  document.querySelector('#refresh')?.addEventListener('click', async () => {
+    try {
+      if (state.view === 'questions') await loadQuestions();
+      else await loadSubmissions();
+    } catch (error) {
+      alert(error.message || String(error));
+    }
+  });
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.view = button.dataset.view;
+      renderCurrentView();
+    });
+  });
+}
+
+function renderCurrentView() {
+  if (state.view === 'questions') renderQuestions();
+  else renderSubmissions();
+}
+
+function renderSubmissions() {
   const rows = filteredRows();
   const metrics = dashboardMetrics();
   const assignments = assignmentOptions();
-  const profileName = state.profile?.full_name || state.profile?.email || 'Teacher';
 
   app.innerHTML = `
     <div class="dashboard-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">Kaveri Technologies</p>
-          <h1>Coding Submissions</h1>
-        </div>
-        <div class="teacher-block">
-          <div class="teacher-copy">
-            <strong>${escapeHtml(profileName)}</strong>
-            <span>${escapeHtml(state.profile?.role || '')}</span>
-          </div>
-          <button id="refresh" class="icon-button" title="Refresh">↻</button>
-          <button id="logout" class="secondary small">Sign out</button>
-        </div>
-      </header>
+      ${headerHtml('Coding Submissions')}
 
       <section class="metrics-grid">
         <article class="metric-card"><span>Total attempts</span><strong>${metrics.attempts}</strong></article>
@@ -210,18 +275,7 @@ function renderDashboard() {
 
         <div class="table-wrap">
           <table>
-            <thead>
-              <tr>
-                <th>Student</th>
-                <th>Assignment</th>
-                <th>Attempt</th>
-                <th>Tests</th>
-                <th>Mark</th>
-                <th>Status</th>
-                <th>Submitted</th>
-                <th></th>
-              </tr>
-            </thead>
+            <thead><tr><th>Student</th><th>Assignment</th><th>Attempt</th><th>Tests</th><th>Mark</th><th>Status</th><th>Submitted</th><th></th></tr></thead>
             <tbody>
               ${rows.length ? rows.map((row) => `
                 <tr>
@@ -243,26 +297,102 @@ function renderDashboard() {
     <div id="drawer-root"></div>
   `;
 
-  document.querySelector('#logout').addEventListener('click', () => supabase.auth.signOut());
-  document.querySelector('#refresh').addEventListener('click', loadSubmissions);
+  bindCommonHeader();
   document.querySelector('#search').addEventListener('input', (event) => {
     state.search = event.target.value;
-    renderDashboard();
+    renderSubmissions();
     const input = document.querySelector('#search');
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   });
   document.querySelector('#assignment-filter').addEventListener('change', (event) => {
     state.assignment = event.target.value;
-    renderDashboard();
+    renderSubmissions();
   });
   document.querySelector('#status-filter').addEventListener('change', (event) => {
     state.status = event.target.value;
-    renderDashboard();
+    renderSubmissions();
   });
   document.querySelectorAll('.view-submission').forEach((button) => {
     button.addEventListener('click', () => openSubmission(button.dataset.id));
   });
+}
+
+function renderQuestions() {
+  const questions = filteredQuestions();
+  const metrics = questionMetrics();
+
+  app.innerHTML = `
+    <div class="dashboard-shell">
+      ${headerHtml('Coding Question Bank')}
+
+      <section class="metrics-grid">
+        <article class="metric-card"><span>Total questions</span><strong>${metrics.total}</strong></article>
+        <article class="metric-card"><span>Published</span><strong>${metrics.published}</strong></article>
+        <article class="metric-card"><span>Drafts</span><strong>${metrics.drafts}</strong></article>
+        <article class="metric-card"><span>Hidden tests</span><strong>${metrics.hiddenTests}</strong></article>
+      </section>
+
+      <section class="panel">
+        <div class="question-toolbar">
+          <input id="question-search" type="search" placeholder="Search question, topic or key…" value="${escapeHtml(state.questionSearch)}" />
+          <button id="create-question" class="primary">+ Create Question</button>
+        </div>
+        <div class="question-note">Published questions appear in students’ VS Code after they click <strong>Refresh Assignments</strong>. Hidden tests are never sent to the extension.</div>
+
+        <div class="table-wrap">
+          <table class="question-table">
+            <thead><tr><th>Question</th><th>Topic</th><th>Visible</th><th>Hidden</th><th>Marks</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+              ${questions.length ? questions.map((question) => {
+                const visible = question.tests.filter((test) => !test.is_hidden).length;
+                const hidden = question.tests.filter((test) => test.is_hidden).length;
+                return `
+                  <tr>
+                    <td><strong>${escapeHtml(question.title)}</strong><div class="table-subtext">${escapeHtml(question.assignment_key)}</div></td>
+                    <td>${escapeHtml(question.topic || 'Python')}</td>
+                    <td>${visible}</td>
+                    <td>${hidden}</td>
+                    <td>${Number(question.marks || 0).toFixed(0)}</td>
+                    <td><span class="publish-pill ${question.is_published ? 'published' : 'draft'}">${question.is_published ? 'Published' : 'Draft'}</span></td>
+                    <td>${escapeHtml(formatDate(question.updated_at || question.created_at))}</td>
+                    <td>
+                      <div class="row-actions">
+                        <button class="secondary small edit-question" data-id="${question.id}">Edit</button>
+                        <button class="secondary small duplicate-question" data-id="${question.id}">Duplicate</button>
+                        <button class="secondary small toggle-question" data-id="${question.id}">${question.is_published ? 'Unpublish' : 'Publish'}</button>
+                        <button class="secondary small danger delete-question" data-id="${question.id}">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('') : `<tr><td colspan="8" class="empty">No questions found. Create your first coding question.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+    <div id="drawer-root"></div>
+  `;
+
+  bindCommonHeader();
+  document.querySelector('#question-search').addEventListener('input', (event) => {
+    state.questionSearch = event.target.value;
+    renderQuestions();
+    const input = document.querySelector('#question-search');
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  });
+  document.querySelector('#create-question').addEventListener('click', () => openQuestionEditor());
+  document.querySelectorAll('.edit-question').forEach((button) => button.addEventListener('click', () => {
+    openQuestionEditor(state.questions.find((q) => q.id === button.dataset.id));
+  }));
+  document.querySelectorAll('.duplicate-question').forEach((button) => button.addEventListener('click', () => {
+    const original = state.questions.find((q) => q.id === button.dataset.id);
+    openQuestionEditor(original, { duplicate: true });
+  }));
+  document.querySelectorAll('.toggle-question').forEach((button) => button.addEventListener('click', () => toggleQuestion(button.dataset.id)));
+  document.querySelectorAll('.delete-question').forEach((button) => button.addEventListener('click', () => deleteQuestion(button.dataset.id)));
 }
 
 function testResultsHtml(results) {
@@ -344,6 +474,231 @@ function openSubmission(id) {
   document.querySelector('#save-review').addEventListener('click', () => saveReview(row));
 }
 
+function addQuestionTestRow(container, test = {}) {
+  const row = document.createElement('div');
+  row.className = 'question-test-row';
+  row.innerHTML = `
+    <div class="test-kind ${test.is_hidden ? 'hidden' : 'visible'}">${test.is_hidden ? 'Hidden' : 'Visible'}</div>
+    <label>Input
+      <textarea class="test-input" rows="2" placeholder="Example: 5">${escapeHtml(test.input_text ?? '')}</textarea>
+    </label>
+    <label>Expected output
+      <textarea class="test-expected" rows="2" placeholder="Example: 15">${escapeHtml(test.expected_output ?? '')}</textarea>
+    </label>
+    <label>Type
+      <select class="test-visibility">
+        <option value="visible" ${test.is_hidden ? '' : 'selected'}>Visible</option>
+        <option value="hidden" ${test.is_hidden ? 'selected' : ''}>Hidden</option>
+      </select>
+    </label>
+    <button type="button" class="icon-button remove-test" title="Remove test">×</button>
+  `;
+
+  const select = row.querySelector('.test-visibility');
+  const badge = row.querySelector('.test-kind');
+  select.addEventListener('change', () => {
+    const hidden = select.value === 'hidden';
+    badge.textContent = hidden ? 'Hidden' : 'Visible';
+    badge.className = `test-kind ${hidden ? 'hidden' : 'visible'}`;
+  });
+  row.querySelector('.remove-test').addEventListener('click', () => row.remove());
+  container.appendChild(row);
+}
+
+function openQuestionEditor(question, { duplicate = false } = {}) {
+  const source = question || {};
+  const editing = Boolean(source.id && !duplicate);
+  const title = duplicate ? `${source.title} Copy` : (source.title || '');
+  const tests = (source.tests || []).map((test) => ({ ...test }));
+
+  const root = document.querySelector('#drawer-root');
+  root.innerHTML = `
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+    <aside class="drawer question-drawer" aria-label="Question editor">
+      <div class="drawer-head">
+        <div>
+          <p class="eyebrow">${editing ? 'Edit coding question' : 'New coding question'}</p>
+          <h2>${editing ? escapeHtml(source.title) : 'Create Question'}</h2>
+          <p class="muted">Students receive only published questions and visible test cases.</p>
+        </div>
+        <button id="close-drawer" class="icon-button">×</button>
+      </div>
+
+      <section class="drawer-section question-form">
+        <div class="question-form-grid">
+          <label>Title
+            <input id="question-title" value="${escapeHtml(title)}" placeholder="Sum of Numbers 1 to N" />
+          </label>
+          <label>Assignment key
+            <input id="question-key" value="${editing ? escapeHtml(source.assignment_key || '') : ''}" placeholder="Auto-generated from title" ${editing ? 'readonly' : ''} />
+          </label>
+          <label>Topic
+            <input id="question-topic" value="${escapeHtml(source.topic || '')}" placeholder="Loops" />
+          </label>
+          <label>Marks
+            <input id="question-marks" type="number" min="1" step="0.5" value="${Number(source.marks || 10)}" />
+          </label>
+          <label>File name
+            <input id="question-file" value="${escapeHtml(source.file_name || 'main.py')}" />
+          </label>
+          <label>Language
+            <select id="question-language"><option value="python">Python</option></select>
+          </label>
+        </div>
+
+        <label>Question
+          <textarea id="question-body" rows="6" placeholder="Write a Python program…">${escapeHtml(source.question || '')}</textarea>
+        </label>
+
+        <label>Starter code <span class="muted">(optional)</span>
+          <textarea id="question-starter" rows="5" placeholder="# Write your solution below">${escapeHtml(source.starter_code || '')}</textarea>
+        </label>
+
+        <label class="publish-toggle">
+          <input id="question-published" type="checkbox" ${source.is_published && !duplicate ? 'checked' : ''} />
+          <span><strong>Publish now</strong><small>Published questions appear in student VS Code.</small></span>
+        </label>
+      </section>
+
+      <section class="drawer-section">
+        <div class="section-title">
+          <div><h3>Test cases</h3><p class="muted compact">Visible tests are downloaded to VS Code. Hidden tests stay in Supabase.</p></div>
+          <div class="button-row">
+            <button id="add-visible-test" class="secondary small">+ Visible Test</button>
+            <button id="add-hidden-test" class="secondary small">+ Hidden Test</button>
+          </div>
+        </div>
+        <div id="question-tests" class="test-editor"></div>
+      </section>
+
+      <section class="drawer-section save-question-bar">
+        <button id="save-question" class="primary">${editing ? 'Save Changes' : 'Create Question'}</button>
+        <p id="question-message" class="fineprint"></p>
+      </section>
+    </aside>
+  `;
+
+  const container = document.querySelector('#question-tests');
+  if (tests.length) tests.forEach((test) => addQuestionTestRow(container, test));
+  else addQuestionTestRow(container, { is_hidden: false });
+
+  const close = () => { root.innerHTML = ''; };
+  document.querySelector('#close-drawer').addEventListener('click', close);
+  document.querySelector('#drawer-backdrop').addEventListener('click', close);
+  document.querySelector('#add-visible-test').addEventListener('click', () => addQuestionTestRow(container, { is_hidden: false }));
+  document.querySelector('#add-hidden-test').addEventListener('click', () => addQuestionTestRow(container, { is_hidden: true }));
+  document.querySelector('#save-question').addEventListener('click', () => saveQuestion(editing ? source.id : null));
+}
+
+async function saveQuestion(existingId) {
+  const button = document.querySelector('#save-question');
+  const message = document.querySelector('#question-message');
+  const title = document.querySelector('#question-title').value.trim();
+  const rawKey = document.querySelector('#question-key').value.trim();
+  const assignmentKey = existingId ? rawKey : (rawKey || slugify(title));
+  const topic = document.querySelector('#question-topic').value.trim() || 'Python';
+  const marks = Number(document.querySelector('#question-marks').value);
+  const fileName = document.querySelector('#question-file').value.trim() || 'main.py';
+  const questionBody = document.querySelector('#question-body').value.trim();
+  const starterCode = document.querySelector('#question-starter').value;
+  const isPublished = document.querySelector('#question-published').checked;
+
+  const tests = [...document.querySelectorAll('.question-test-row')].map((row, index) => ({
+    input_text: row.querySelector('.test-input').value,
+    expected_output: row.querySelector('.test-expected').value,
+    is_hidden: row.querySelector('.test-visibility').value === 'hidden',
+    position: index + 1
+  }));
+
+  if (!title || !assignmentKey || !questionBody) {
+    message.textContent = 'Title, assignment key and question are required.';
+    return;
+  }
+  if (!Number.isFinite(marks) || marks <= 0) {
+    message.textContent = 'Marks must be greater than 0.';
+    return;
+  }
+  if (!tests.length || !tests.some((test) => !test.is_hidden)) {
+    message.textContent = 'Add at least one visible test case.';
+    return;
+  }
+  if (tests.some((test) => !String(test.expected_output).trim())) {
+    message.textContent = 'Every test needs an expected output.';
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Saving…';
+  message.textContent = '';
+
+  const payload = {
+    assignment_key: assignmentKey,
+    title,
+    topic,
+    question: questionBody,
+    language: 'python',
+    file_name: fileName,
+    starter_code: starterCode || null,
+    marks,
+    is_published: isPublished,
+    created_by: state.session.user.id,
+    updated_at: new Date().toISOString()
+  };
+
+  try {
+    let assignmentId = existingId;
+    if (existingId) {
+      const { error } = await supabase.from('coding_vscode_assignments').update(payload).eq('id', existingId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await supabase.from('coding_vscode_assignments').insert(payload).select('id').single();
+      if (error) throw error;
+      assignmentId = data.id;
+    }
+
+    const { error: deleteError } = await supabase.from('coding_vscode_test_cases').delete().eq('assignment_id', assignmentId);
+    if (deleteError) throw deleteError;
+
+    const testPayload = tests.map((test) => ({ ...test, assignment_id: assignmentId }));
+    const { error: testError } = await supabase.from('coding_vscode_test_cases').insert(testPayload);
+    if (testError) throw testError;
+
+    message.textContent = isPublished ? 'Saved and published.' : 'Saved as draft.';
+    await loadQuestions(false);
+    setTimeout(() => {
+      document.querySelector('#drawer-root').innerHTML = '';
+      renderQuestions();
+    }, 350);
+  } catch (error) {
+    message.textContent = error.message || String(error);
+    button.disabled = false;
+    button.textContent = existingId ? 'Save Changes' : 'Create Question';
+  }
+}
+
+async function toggleQuestion(id) {
+  const question = state.questions.find((item) => item.id === id);
+  if (!question) return;
+  const { error } = await supabase
+    .from('coding_vscode_assignments')
+    .update({ is_published: !question.is_published, updated_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) return alert(error.message);
+  await loadQuestions();
+}
+
+async function deleteQuestion(id) {
+  const question = state.questions.find((item) => item.id === id);
+  if (!question) return;
+  if (!window.confirm(`Delete "${question.title}"? Existing student submissions will remain, but the question and its test cases will be removed.`)) return;
+
+  const { error: testsError } = await supabase.from('coding_vscode_test_cases').delete().eq('assignment_id', id);
+  if (testsError) return alert(testsError.message);
+  const { error } = await supabase.from('coding_vscode_assignments').delete().eq('id', id);
+  if (error) return alert(error.message);
+  await loadQuestions();
+}
+
 async function saveReview(row) {
   const button = document.querySelector('#save-review');
   const message = document.querySelector('#save-message');
@@ -394,7 +749,35 @@ async function loadSubmissions(rerender = true) {
 
   if (error) throw error;
   state.submissions = computeAttempts(data || []);
-  if (rerender) renderDashboard();
+  if (rerender) renderSubmissions();
+}
+
+async function loadQuestions(rerender = true) {
+  const { data: questions, error } = await supabase
+    .from('coding_vscode_assignments')
+    .select('id,assignment_key,title,topic,question,language,file_name,starter_code,marks,is_published,created_by,created_at,updated_at')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+
+  let tests = [];
+  const ids = (questions || []).map((question) => question.id);
+  if (ids.length) {
+    const { data: testRows, error: testError } = await supabase
+      .from('coding_vscode_test_cases')
+      .select('id,assignment_id,input_text,expected_output,is_hidden,position,created_at')
+      .in('assignment_id', ids)
+      .order('position', { ascending: true });
+    if (testError) throw testError;
+    tests = testRows || [];
+  }
+
+  state.questions = (questions || []).map((question) => ({
+    ...question,
+    tests: tests.filter((test) => test.assignment_id === question.id)
+  }));
+
+  if (rerender) renderQuestions();
 }
 
 async function loadDashboard() {
@@ -426,9 +809,9 @@ async function loadDashboard() {
       return;
     }
 
-    await loadSubmissions(false);
+    await Promise.all([loadSubmissions(false), loadQuestions(false)]);
     state.loading = false;
-    renderDashboard();
+    renderCurrentView();
   } catch (error) {
     state.loading = false;
     state.error = error.message || String(error);
