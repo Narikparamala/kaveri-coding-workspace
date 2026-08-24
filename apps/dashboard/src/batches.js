@@ -20,6 +20,9 @@ const state = {
   error: ''
 };
 
+let pageLoadInFlight = false;
+let initialPageLoadComplete = false;
+
 function esc(value = '') {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -84,7 +87,7 @@ function renderError() {
         <button id="retry" class="primary wide">Retry</button>
       </section>
     </main>`;
-  document.querySelector('#retry').addEventListener('click', loadPage);
+  document.querySelector('#retry').addEventListener('click', () => loadPage({ force: true }));
 }
 
 function activeMemberships(batchId) {
@@ -391,14 +394,19 @@ async function loadData() {
   }
 }
 
-async function loadPage() {
+async function loadPage({ force = false } = {}) {
+  if (pageLoadInFlight && !force) return;
+  pageLoadInFlight = true;
   state.loading = true;
   renderLoading();
 
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw sessionError;
     state.session = session;
+
     if (!session) {
+      state.profile = null;
       renderLogin();
       return;
     }
@@ -420,8 +428,25 @@ async function loadPage() {
   } catch (error) {
     state.error = error.message || String(error);
     renderError();
+  } finally {
+    pageLoadInFlight = false;
+    initialPageLoadComplete = true;
   }
 }
 
-supabase.auth.onAuthStateChange(() => setTimeout(loadPage, 0));
+supabase.auth.onAuthStateChange((event) => {
+  if (!initialPageLoadComplete) return;
+
+  if (event === 'SIGNED_OUT') {
+    state.session = null;
+    state.profile = null;
+    renderLogin();
+    return;
+  }
+
+  if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
+    setTimeout(() => loadPage(), 0);
+  }
+});
+
 loadPage();
