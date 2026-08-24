@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const path = require('path');
 const os = require('os');
 const core = require('./extension');
-const { signIn, signOut, ensureSession, uploadSubmission } = require('./supabase');
+const { signIn, signOut, ensureSession, uploadSubmission, handleAuthUri } = require('./supabase');
 
 function submissionsRootUri() {
   return vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding', '.kaveri', 'submissions'));
@@ -49,6 +49,7 @@ async function submitOnline(context) {
 
   const accountName = session.profile?.full_name
     || session.user?.user_metadata?.full_name
+    || session.user?.user_metadata?.name
     || session.user?.email
     || 'Student';
 
@@ -108,7 +109,12 @@ async function submitOnline(context) {
 function activate(context) {
   core.activate(context);
 
+  const uriHandler = vscode.window.registerUriHandler({
+    handleUri: (uri) => handleAuthUri(context, uri)
+  });
+
   context.subscriptions.push(
+    uriHandler,
     vscode.commands.registerCommand('kaveri.signIn', () => signIn(context)),
     vscode.commands.registerCommand('kaveri.signOut', () => signOut(context)),
     vscode.commands.registerCommand('kaveri.submitOnline', () => submitOnline(context))
