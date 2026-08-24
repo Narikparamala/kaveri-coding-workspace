@@ -1,0 +1,1 @@
+Stable rollout baseline commit is the current master after 2026-08-24 rollout checklist preparation. Do not change UI during rollout.
