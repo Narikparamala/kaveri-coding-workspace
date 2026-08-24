@@ -26,6 +26,11 @@ jobs:
           node --check apps/vscode-extension/assignments-api.js
           node --check apps/vscode-extension/results-api.js
 
+      - name: Check dashboard helper syntax
+        run: |
+          node --check apps/dashboard/src/batches.js
+          node --check apps/dashboard/vite.config.js
+
       - name: Install dashboard dependencies
         working-directory: apps/dashboard
         run: npm install
