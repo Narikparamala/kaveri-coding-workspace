@@ -1,0 +1,14 @@
+KAVERI CODING — STUDENT SETUP
+
+1. Install Python and VS Code if they are not already installed.
+2. Install the Kaveri Coding VSIX extension in VS Code.
+3. Restart VS Code.
+4. Click the Kaveri Coding icon on the left.
+5. Sign in with your own Google account.
+6. Click Join Batch and enter the batch code given by your faculty.
+7. Click Refresh Assignments.
+8. Open your question, write your Python code in main.py, and click Kaveri Tests.
+9. When ready, click Kaveri Submit.
+10. To see marks/feedback later: Kaveri → My Results → Refresh.
+
+Important: Use your own Google account. Do not share another student's login.
