@@ -3,6 +3,7 @@ const path = require('path');
 const os = require('os');
 const core = require('./extension');
 const { signIn, signOut, ensureSession, uploadSubmission } = require('./supabase');
+const { fetchPublishedAssignments } = require('./assignments-api');
 
 function submissionsRootUri() {
   return vscode.Uri.file(path.join(os.homedir(), 'Documents', 'Kaveri Coding', '.kaveri', 'submissions'));
@@ -107,7 +108,9 @@ async function submitOnline(context) {
 }
 
 function activate(context) {
-  core.activate(context);
+  core.activate(context, {
+    loadAssignments: () => fetchPublishedAssignments(context)
+  });
 
   context.subscriptions.push(
     vscode.commands.registerCommand('kaveri.signIn', () => signIn(context)),
@@ -117,9 +120,7 @@ function activate(context) {
 }
 
 function deactivate() {
-  if (typeof core.deactivate === 'function') {
-    core.deactivate();
-  }
+  if (typeof core.deactivate === 'function') core.deactivate();
 }
 
 module.exports = { activate, deactivate };
