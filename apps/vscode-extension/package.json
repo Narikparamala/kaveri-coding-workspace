@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -11,7 +11,8 @@
     "Education"
   ],
   "activationEvents": [
-    "onView:kaveri.assignments"
+    "onView:kaveri.assignments",
+    "onCommand:kaveri.runTests"
   ],
   "main": "./extension.js",
   "contributes": {
@@ -27,6 +28,11 @@
       {
         "command": "kaveri.openWorkspaceFolder",
         "title": "Kaveri: Open Coding Folder"
+      },
+      {
+        "command": "kaveri.runTests",
+        "title": "Kaveri: Run Tests",
+        "icon": "$(beaker)"
       }
     ],
     "viewsContainers": {
@@ -56,6 +62,13 @@
         {
           "command": "kaveri.openWorkspaceFolder",
           "when": "view == kaveri.assignments",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "kaveri.runTests",
+          "when": "resourceFilename == main.py",
           "group": "navigation"
         }
       ]
