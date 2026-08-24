@@ -5,6 +5,7 @@ const core = require('./extension');
 const { signIn, signOut, ensureSession, uploadSubmission } = require('./supabase');
 const { fetchPublishedAssignments } = require('./assignments-api');
 const { fetchMyResults } = require('./results-api');
+const { joinBatchByCode } = require('./batch-api');
 
 let resultsProvider;
 let resultsOutput;
@@ -227,6 +228,29 @@ function openResult(row) {
   resultsOutput.show(true);
 }
 
+async function joinBatch(context) {
+  const session = await ensureSession(context);
+  if (!session) return;
+
+  const code = await vscode.window.showInputBox({
+    title: 'Kaveri Coding — Join Batch',
+    prompt: 'Enter the batch code given by your teacher.',
+    placeHolder: 'Example: KAV-7K2Q9M',
+    ignoreFocusOut: true,
+    validateInput: (value) => value.trim().length < 4 ? 'Enter a valid batch code.' : undefined
+  });
+  if (!code) return;
+
+  try {
+    const result = await joinBatchByCode(context, code);
+    if (!result) return;
+    vscode.window.showInformationMessage(`Kaveri: Joined ${result.batch_name} successfully.`);
+    await vscode.commands.executeCommand('kaveri.refreshAssignments');
+  } catch (error) {
+    vscode.window.showErrorMessage(`Kaveri: Could not join batch. ${error.message || error}`);
+  }
+}
+
 async function submitOnline(context) {
   const session = await ensureSession(context);
   if (!session) return;
@@ -302,6 +326,7 @@ function activate(context) {
     vscode.window.registerTreeDataProvider('kaveri.results', resultsProvider),
     vscode.commands.registerCommand('kaveri.refreshResults', () => resultsProvider.reload()),
     vscode.commands.registerCommand('kaveri.openResult', openResult),
+    vscode.commands.registerCommand('kaveri.joinBatch', () => joinBatch(context)),
     vscode.commands.registerCommand('kaveri.signIn', async () => {
       const session = await signIn(context);
       if (session) await resultsProvider.reload({ silent: true });
