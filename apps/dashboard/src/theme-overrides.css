@@ -205,99 +205,192 @@ html[data-theme='dark'] .fineprint {
   box-shadow: 0 0 0 1px rgba(0,75,141,.12) !important;
 }
 
-/* Better behavior on narrow laptops and tablets. */
-@media (max-width: 1180px) {
+/* --------------------------------------------------------------------------
+   Responsive application navbar
+   -------------------------------------------------------------------------- */
+.topbar {
+  /* It must scroll with the document; it is not a sticky/fixed banner. */
+  position: relative !important;
+  top: auto !important;
+  z-index: 5 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+  width: 100%;
+}
+
+.topbar-left {
+  display: flex !important;
+  flex: 1 1 auto;
+  align-items: center !important;
+  gap: clamp(18px, 2.5vw, 34px) !important;
+  min-width: 0;
+}
+
+.topbar-left > div:first-child {
+  min-width: 220px;
+  flex: 0 1 auto;
+}
+
+.section-tabs {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  width: auto !important;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.section-tabs .nav-tab,
+.section-tabs .manage-batches-link {
+  flex: 0 0 auto !important;
+  min-width: max-content;
+}
+
+.teacher-block {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+/* Tablet / narrow laptop: title and navigation become two clean rows inside
+   the same navbar while account controls remain aligned to the right. */
+@media (max-width: 1080px) {
   .topbar {
-    align-items: flex-start;
+    align-items: flex-start !important;
   }
+
   .topbar-left {
-    flex: 1 1 auto;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .topbar-left > div:first-child {
     min-width: 0;
   }
+
   .section-tabs {
-    flex-wrap: wrap;
+    width: fit-content !important;
+    max-width: 100%;
+    flex-wrap: wrap !important;
   }
 }
 
-@media (max-width: 900px) {
+/* Tablet: account controls form their own row. */
+@media (max-width: 820px) {
   .topbar {
-    flex-direction: column;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 14px !important;
   }
-  .teacher-block {
-    width: 100%;
-    justify-content: flex-end;
-  }
-  .topbar-left {
-    width: 100%;
-  }
-  .section-tabs {
-    width: 100%;
-  }
-  .section-tabs .nav-tab {
-    flex: 1 1 120px;
-    text-align: center;
-    justify-content: center;
-  }
-}
 
-@media (max-width: 767px) {
+  .topbar-left,
   .teacher-block {
-    display: grid;
-    grid-template-columns: 1fr 40px 40px auto;
-    align-items: center;
-    gap: 8px;
+    width: 100%;
   }
+
+  .teacher-block {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 40px 40px auto;
+    gap: 8px !important;
+  }
+
   .teacher-copy {
     display: flex !important;
+    text-align: left !important;
     min-width: 0;
-    text-align: left;
   }
+
   .teacher-copy strong,
   .teacher-copy span {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+
   .section-tabs {
-    display: grid;
+    display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100% !important;
   }
-  .section-tabs .nav-tab {
+
+  .section-tabs .nav-tab,
+  .section-tabs .manage-batches-link {
     width: 100%;
-    min-width: 0;
-    padding-inline: 8px;
-  }
-  .filters {
-    gap: 8px;
+    min-width: 0 !important;
+    text-align: center;
+    justify-content: center;
   }
 }
 
+/* Mobile: compact brand, full-width nav and touch-friendly account controls. */
 @media (max-width: 560px) {
   .dashboard-shell {
     width: calc(100% - 24px) !important;
   }
+
   .topbar {
-    margin-inline: -12px !important;
+    margin: 0 0 18px !important;
+    border-radius: var(--radius-lg) !important;
+    gap: 12px !important;
   }
+
+  .topbar-left {
+    gap: 10px !important;
+  }
+
+  .topbar h1 {
+    font-size: 24px !important;
+  }
+
+  .topbar .eyebrow {
+    font-size: 10px !important;
+    letter-spacing: .08em !important;
+  }
+
+  .section-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 3px !important;
+  }
+
+  .section-tabs .nav-tab,
+  .section-tabs .manage-batches-link {
+    min-height: 38px;
+    padding-inline: 7px !important;
+    font-size: 12px !important;
+  }
+
   .teacher-block {
-    grid-template-columns: 1fr 38px 38px;
+    grid-template-columns: minmax(0, 1fr) 38px 38px !important;
   }
+
   .teacher-block #logout {
     grid-column: 1 / -1;
     width: 100%;
   }
-  .section-tabs {
-    grid-template-columns: 1fr;
-  }
+
   .metrics-grid,
   .batch-metrics {
     grid-template-columns: 1fr !important;
   }
+
   .metric-card {
     min-height: auto;
   }
+
   .brand-mark {
     width: 72px !important;
     height: 72px !important;
+  }
+}
+
+/* Very narrow phones: nav becomes vertical instead of squeezing labels. */
+@media (max-width: 390px) {
+  .section-tabs {
+    grid-template-columns: 1fr !important;
   }
 }
