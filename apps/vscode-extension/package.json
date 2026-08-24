@@ -2,17 +2,13 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
   },
   "categories": [
     "Education"
-  ],
-  "activationEvents": [
-    "onView:kaveri.assignments",
-    "onCommand:kaveri.runTests"
   ],
   "main": "./extension.js",
   "contributes": {
