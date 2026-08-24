@@ -1,8 +1,12 @@
 const vscode = require('vscode');
+const crypto = require('crypto');
 
 const SUPABASE_URL = 'https://atcncxckuokjarsxckwy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_A5ARKVkEnJVtGV0mxrdtyw_3YmLQ4nu';
 const SESSION_SECRET = 'kaveri.supabaseSession.v1';
+const OAUTH_STATE_KEY = 'kaveri.googleOAuthState.v1';
+
+let pendingOAuth;
 
 async function parseResponse(response) {
   const text = await response.text();
@@ -33,6 +37,16 @@ async function authRequest(path, body) {
     body: JSON.stringify(body)
   });
 
+  return parseResponse(response);
+}
+
+async function fetchAuthUser(accessToken) {
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`
+    }
+  });
   return parseResponse(response);
 }
 
@@ -98,48 +112,139 @@ async function refreshSession(context, session) {
   }
 }
 
-async function signIn(context) {
-  const email = await vscode.window.showInputBox({
-    title: 'Kaveri Coding — Sign In',
-    prompt: 'Enter the email used for your Kaveri account.',
-    placeHolder: 'student@example.com',
-    ignoreFocusOut: true,
-    validateInput: (value) => value.includes('@') ? undefined : 'Enter a valid email address.'
-  });
+function finishPendingOAuth(error, session) {
+  if (!pendingOAuth) return;
+  clearTimeout(pendingOAuth.timer);
+  const { resolve, reject } = pendingOAuth;
+  pendingOAuth = undefined;
+  if (error) reject(error);
+  else resolve(session);
+}
 
-  if (!email) return undefined;
+async function handleAuthUri(context, uri) {
+  if (uri.path !== '/auth-callback') return;
 
-  const password = await vscode.window.showInputBox({
-    title: 'Kaveri Coding — Sign In',
-    prompt: 'Enter your Kaveri account password.',
-    password: true,
-    ignoreFocusOut: true
-  });
+  const query = new URLSearchParams(uri.query || '');
+  const fragment = new URLSearchParams(uri.fragment || '');
+  const expectedState = context.globalState.get(OAUTH_STATE_KEY);
+  const receivedState = query.get('state');
 
-  if (!password) return undefined;
+  const oauthError = fragment.get('error_description')
+    || query.get('error_description')
+    || fragment.get('error')
+    || query.get('error');
+
+  if (oauthError) {
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    finishPendingOAuth(new Error(oauthError));
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${oauthError}`);
+    return;
+  }
+
+  if (!expectedState || receivedState !== expectedState) {
+    const error = new Error('The Google sign-in response could not be verified. Please try again.');
+    finishPendingOAuth(error);
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
+    return;
+  }
+
+  const accessToken = fragment.get('access_token') || query.get('access_token');
+  const refreshToken = fragment.get('refresh_token') || query.get('refresh_token');
+  const expiresIn = fragment.get('expires_in') || query.get('expires_in') || '3600';
+
+  if (!accessToken) {
+    const error = new Error('Google sign-in returned without a Supabase access token.');
+    finishPendingOAuth(error);
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
+    return;
+  }
 
   try {
-    const data = await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Kaveri: Signing in...',
-        cancellable: false
-      },
-      () => authRequest('/auth/v1/token?grant_type=password', {
-        email: email.trim(),
-        password
-      })
-    );
+    const user = await fetchAuthUser(accessToken);
+    const profile = await fetchProfile(accessToken, user.id);
+    const session = normalizeSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: Number(expiresIn),
+      user
+    }, profile);
 
-    const profile = await fetchProfile(data.access_token, data.user.id);
-    const session = normalizeSession(data, profile);
     await saveSession(context, session);
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
 
-    const displayName = profile?.full_name || data.user?.email || 'Kaveri user';
-    vscode.window.showInformationMessage(`Kaveri: Signed in as ${displayName}.`);
-    return session;
+    const displayName = profile?.full_name
+      || user?.user_metadata?.full_name
+      || user?.user_metadata?.name
+      || user?.email
+      || 'Kaveri user';
+
+    vscode.window.showInformationMessage(`Kaveri: Signed in with Google as ${displayName}.`);
+    finishPendingOAuth(undefined, session);
   } catch (error) {
-    vscode.window.showErrorMessage(`Kaveri sign-in failed: ${error.message}`);
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    finishPendingOAuth(error);
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
+  }
+}
+
+async function signIn(context) {
+  const existing = await loadSession(context);
+  if (existing?.access_token && existing.expires_at > Date.now()) {
+    const displayName = existing.profile?.full_name
+      || existing.user?.user_metadata?.full_name
+      || existing.user?.email
+      || 'Kaveri user';
+    vscode.window.showInformationMessage(`Kaveri: Already signed in as ${displayName}.`);
+    return existing;
+  }
+
+  if (pendingOAuth) {
+    vscode.window.showInformationMessage('Kaveri: Google sign-in is already open in your browser.');
+    return pendingOAuth.promise;
+  }
+
+  const state = crypto.randomBytes(24).toString('hex');
+  await context.globalState.update(OAUTH_STATE_KEY, state);
+
+  const callbackUri = `${vscode.env.uriScheme}://kaveritechnologies.kaveri-coding/auth-callback?state=${encodeURIComponent(state)}`;
+  const authUrl = `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackUri)}`;
+
+  let resolvePromise;
+  let rejectPromise;
+  const promise = new Promise((resolve, reject) => {
+    resolvePromise = resolve;
+    rejectPromise = reject;
+  });
+
+  const timer = setTimeout(async () => {
+    if (!pendingOAuth) return;
+    pendingOAuth = undefined;
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    rejectPromise(new Error('Google sign-in timed out. Please try again.'));
+  }, 5 * 60 * 1000);
+
+  pendingOAuth = {
+    promise,
+    resolve: resolvePromise,
+    reject: rejectPromise,
+    timer
+  };
+
+  const opened = await vscode.env.openExternal(vscode.Uri.parse(authUrl));
+  if (!opened) {
+    clearTimeout(timer);
+    pendingOAuth = undefined;
+    await context.globalState.update(OAUTH_STATE_KEY, undefined);
+    vscode.window.showErrorMessage('Kaveri could not open the Google sign-in page in your browser.');
+    return undefined;
+  }
+
+  vscode.window.showInformationMessage('Kaveri: Complete Google sign-in in your browser. VS Code will continue automatically.');
+
+  try {
+    return await promise;
+  } catch (error) {
+    vscode.window.showErrorMessage(`Kaveri Google sign-in failed: ${error.message}`);
     return undefined;
   }
 }
@@ -161,6 +266,7 @@ async function ensureSession(context) {
 
 async function signOut(context) {
   await context.secrets.delete(SESSION_SECRET);
+  await context.globalState.update(OAUTH_STATE_KEY, undefined);
   vscode.window.showInformationMessage('Kaveri: Signed out from this VS Code installation.');
 }
 
@@ -170,6 +276,7 @@ async function uploadSubmission(context, localSubmission) {
 
   const studentName = session.profile?.full_name
     || session.user?.user_metadata?.full_name
+    || session.user?.user_metadata?.name
     || localSubmission.studentName
     || session.user?.email
     || 'Student';
@@ -219,12 +326,8 @@ async function uploadSubmission(context, localSubmission) {
     if (error.status === 401) {
       const refreshed = await refreshSession(context, session);
       if (refreshed) {
-        try {
-          const rows = await doUpload(refreshed);
-          return Array.isArray(rows) ? rows[0] : rows;
-        } catch (retryError) {
-          throw retryError;
-        }
+        const rows = await doUpload(refreshed);
+        return Array.isArray(rows) ? rows[0] : rows;
       }
     }
     throw error;
@@ -235,5 +338,6 @@ module.exports = {
   signIn,
   signOut,
   ensureSession,
-  uploadSubmission
+  uploadSubmission,
+  handleAuthUri
 };
