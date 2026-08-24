@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+.vite/
+**/.vite/
+
+# Packaged VS Code extensions
+*.vsix
+
+# Local OS/editor noise
+.DS_Store
+Thumbs.db
