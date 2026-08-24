@@ -71,9 +71,7 @@ function navigate(section) {
 
 function renderNavbar(shell) {
   const old = legacyHeader();
-  if (!old) return;
-
-  shell.querySelector('.kav-nav')?.remove();
+  if (!old || shell.querySelector(':scope > .kav-nav')) return;
 
   const active = currentSection();
   const profile = profileInfo();
@@ -120,21 +118,34 @@ function renderNavbar(shell) {
 }
 
 function honorRequestedView() {
-  if (location.pathname !== '/' && location.pathname !== '/index.html') return;
+  if (location.pathname !== '/' && location.pathname !== '/index.html') return false;
   const requested = new URLSearchParams(location.search).get('view');
-  if (requested !== 'questions') return;
+  if (requested !== 'questions') return false;
 
   const button = legacyHeader()?.querySelector('[data-view="questions"]');
   if (button && !button.classList.contains('active')) {
-    button.click();
     history.replaceState({}, '', '/');
+    button.click();
+    return true;
   }
+  return false;
 }
 
 function sync() {
   const shell = document.querySelector('.dashboard-shell');
   if (!shell || !legacyHeader()) return;
-  honorRequestedView();
+
+  /* If our navbar is already present, do not touch the DOM again. This keeps
+     the MutationObserver from reacting to its own work. */
+  if (shell.querySelector(':scope > .kav-nav')) {
+    applyTheme(document.documentElement.dataset.theme || preferredTheme());
+    return;
+  }
+
+  /* Switching to Questions causes the dashboard to rerender, so wait for the
+     next observer pass before creating the navbar for that new view. */
+  if (honorRequestedView()) return;
+
   renderNavbar(shell);
 }
 
