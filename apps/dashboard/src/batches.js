@@ -103,6 +103,7 @@ function batchCard(batch) {
   const members = activeMemberships(batch.id);
   const memberIds = new Set(members.map((m) => m.student_id));
   const available = state.students.filter((s) => !memberIds.has(s.id));
+  const canDelete = state.profile?.role === 'super_admin';
 
   return `
     <article class="batch-card" data-batch-id="${batch.id}">
@@ -114,7 +115,10 @@ function batchCard(batch) {
           </div>
           <p class="muted">${esc(batch.description || 'No description')}</p>
         </div>
-        <span class="member-count">${members.length} student${members.length === 1 ? '' : 's'}</span>
+        <div class="batch-card-actions">
+          <span class="member-count">${members.length} student${members.length === 1 ? '' : 's'}</span>
+          ${canDelete ? `<button class="delete-batch" data-batch="${batch.id}" data-name="${esc(batch.name)}" title="Delete batch">Delete batch</button>` : ''}
+        </div>
       </div>
 
       <div class="member-list">
@@ -237,6 +241,7 @@ function renderPage() {
   document.querySelector('#create-batch-form')?.addEventListener('submit', createBatch);
   document.querySelectorAll('.add-student').forEach((button) => button.addEventListener('click', addStudent));
   document.querySelectorAll('.remove-student').forEach((button) => button.addEventListener('click', removeStudent));
+  document.querySelectorAll('.delete-batch').forEach((button) => button.addEventListener('click', deleteBatch));
   document.querySelectorAll('.target-checkbox').forEach((checkbox) => checkbox.addEventListener('change', toggleTarget));
 }
 
@@ -294,6 +299,44 @@ async function removeStudent(event) {
   const { error } = await supabase.from('batch_students').update({ status: 'inactive' }).eq('id', membership.id);
   if (error) return alert(error.message);
   await loadData();
+}
+
+async function deleteBatch(event) {
+  if (state.profile?.role !== 'super_admin') return;
+
+  const button = event.currentTarget;
+  const batchId = button.dataset.batch;
+  const batch = state.batches.find((item) => item.id === batchId);
+  const batchName = batch?.name || button.dataset.name || 'this batch';
+  const memberCount = activeMemberships(batchId).length;
+  const targetCount = state.targets.filter((target) => target.batch_id === batchId).length;
+
+  const confirmed = window.confirm(
+    `Delete "${batchName}"?\n\n` +
+    `${memberCount} active student membership${memberCount === 1 ? '' : 's'} and ${targetCount} question assignment${targetCount === 1 ? '' : 's'} will be removed from this batch.\n\n` +
+    'Student accounts, submitted work and questions will NOT be deleted.'
+  );
+  if (!confirmed) return;
+
+  button.disabled = true;
+  button.textContent = 'Deleting…';
+
+  try {
+    const targetDelete = await supabase.from('coding_vscode_assignment_batches').delete().eq('batch_id', batchId);
+    if (targetDelete.error) throw targetDelete.error;
+
+    const membershipDelete = await supabase.from('batch_students').delete().eq('batch_id', batchId);
+    if (membershipDelete.error) throw membershipDelete.error;
+
+    const batchDelete = await supabase.from('batches').delete().eq('id', batchId);
+    if (batchDelete.error) throw batchDelete.error;
+
+    await loadData();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = 'Delete batch';
+    alert(`Could not delete batch: ${error.message || error}`);
+  }
 }
 
 async function toggleTarget(event) {
