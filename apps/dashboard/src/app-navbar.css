@@ -1,0 +1,275 @@
+/* Kaveri faculty/admin navbar. This is intentionally isolated from legacy .topbar styles. */
+
+/* Keep the original header in the DOM for its existing event handlers, but never show it. */
+.dashboard-shell > .topbar {
+  display: none !important;
+}
+
+.kav-nav {
+  display: grid;
+  grid-template-columns: minmax(250px, auto) minmax(300px, 1fr) auto;
+  grid-template-areas: "brand nav actions";
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  color: #fff;
+  background: linear-gradient(120deg, #003465, #004b8d);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,52,101,.12);
+}
+
+.kav-nav__brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.kav-nav__logo {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,.6);
+}
+
+.kav-nav__brand-copy {
+  min-width: 0;
+}
+
+.kav-nav__eyebrow {
+  margin: 0 0 3px;
+  color: #b9d6ff;
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kav-nav__title {
+  margin: 0;
+  color: #fff;
+  font-size: clamp(20px, 2.3vw, 27px);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kav-nav__links {
+  grid-area: nav;
+  justify-self: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(105px, 1fr));
+  gap: 4px;
+  width: min(100%, 430px);
+  padding: 3px;
+  background: rgba(255,255,255,.10);
+  border: 1px solid rgba(255,255,255,.20);
+  border-radius: 6px;
+}
+
+.kav-nav__link {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e7f2ff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kav-nav__link:hover {
+  color: #fff;
+  background: rgba(255,255,255,.12);
+}
+
+.kav-nav__link.is-active {
+  color: #003465;
+  background: #fcd400;
+}
+
+.kav-nav__actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 0;
+}
+
+.kav-nav__user {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  margin-right: 3px;
+  text-align: right;
+}
+
+.kav-nav__user strong {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 13px;
+}
+
+.kav-nav__user span {
+  color: #b9d6ff;
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+.kav-nav__icon,
+.kav-nav__signout {
+  min-height: 38px;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 4px;
+  background: rgba(255,255,255,.07);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.kav-nav__icon {
+  width: 38px;
+  padding: 0;
+  font-size: 16px;
+}
+
+.kav-nav__signout {
+  padding: 7px 11px;
+  font-size: 12px;
+}
+
+.kav-nav__icon:hover,
+.kav-nav__signout:hover {
+  background: rgba(255,255,255,.15);
+}
+
+/* Narrow laptop / tablet: two rows. Brand + actions on row one, nav on row two. */
+@media (max-width: 1050px) {
+  .kav-nav {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand actions"
+      "nav nav";
+    gap: 10px 12px;
+    padding: 12px 14px;
+  }
+
+  .kav-nav__links {
+    justify-self: stretch;
+    width: 100%;
+    max-width: none;
+  }
+}
+
+/* This is the width shown in the VS Code screenshots (~650px). */
+@media (max-width: 760px) {
+  .dashboard-shell {
+    width: calc(100% - 20px) !important;
+  }
+
+  .kav-nav {
+    margin-bottom: 18px;
+    padding: 10px 11px;
+    gap: 9px 8px;
+  }
+
+  .kav-nav__logo {
+    width: 46px;
+    height: 46px;
+    flex-basis: 46px;
+  }
+
+  .kav-nav__title {
+    font-size: clamp(18px, 4vw, 22px);
+  }
+
+  .kav-nav__eyebrow {
+    font-size: 9px;
+  }
+
+  .kav-nav__user {
+    display: none;
+  }
+
+  .kav-nav__actions {
+    gap: 5px;
+  }
+
+  .kav-nav__icon {
+    width: 34px;
+    min-height: 34px;
+    font-size: 14px;
+  }
+
+  .kav-nav__signout {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .kav-nav__links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .kav-nav__link {
+    min-width: 0;
+    min-height: 38px;
+    padding: 7px 5px;
+    font-size: 11px;
+  }
+}
+
+/* Phones: keep navigation readable; actions move to their own compact row only when necessary. */
+@media (max-width: 480px) {
+  .kav-nav {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "nav"
+      "actions";
+  }
+
+  .kav-nav__actions {
+    justify-content: flex-end;
+  }
+
+  .kav-nav__links {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .kav-nav__link {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 340px) {
+  .kav-nav__links {
+    grid-template-columns: 1fr;
+  }
+}
