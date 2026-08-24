@@ -20,6 +20,10 @@
 .batch-status, .member-count, .delivery-mode { border-radius: 999px; padding: 5px 9px; font-size: 12px; white-space: nowrap; }
 .batch-status { background: rgba(67, 190, 124, .13); color: #6fe0a3; text-transform: capitalize; }
 .member-count { background: #142238; color: #9fb4cd; }
+.batch-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.delete-batch { border: 1px solid rgba(255, 92, 92, .45); background: rgba(255, 76, 76, .08); color: #ff8c8c; border-radius: 9px; min-height: 30px; padding: 5px 9px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.delete-batch:hover { background: rgba(255, 76, 76, .16); border-color: rgba(255, 92, 92, .75); }
+.delete-batch:disabled { opacity: .55; cursor: wait; }
 .delivery-mode.everyone { background: rgba(77, 166, 255, .13); color: #8fc7ff; }
 .delivery-mode.targeted { background: rgba(240, 180, 41, .14); color: #ffd266; }
 
@@ -56,6 +60,8 @@
   .create-batch-form { grid-template-columns: 1fr; }
   .create-batch-form .wide-field { grid-column: auto; }
   .section-heading { align-items: flex-start; flex-direction: column; }
+  .batch-card-head { flex-direction: column; }
+  .batch-card-actions { width: 100%; justify-content: space-between; }
   .add-student-row { grid-template-columns: 1fr; }
   .faculty-note { flex-direction: column; }
 }
