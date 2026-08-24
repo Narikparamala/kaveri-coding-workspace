@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Kaveri Coding — Batch Debug</title>
+    <style>
+      body{margin:0;background:#07111f;color:#e8f0fb;font-family:Consolas,"Cascadia Code",monospace;padding:24px}
+      .wrap{max-width:1100px;margin:auto}.head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px}
+      h1{font-family:system-ui;margin:0}.muted{color:#8fa6bf}.box{background:#0c1a2d;border:1px solid #233c59;border-radius:14px;padding:16px}
+      #log{white-space:pre-wrap;line-height:1.55;min-height:280px}.ok{color:#72e2a8}.bad{color:#ff8f8f}.warn{color:#ffd36c}
+      button,a{background:#f0b429;color:#101722;border:0;border-radius:9px;padding:10px 14px;font-weight:700;text-decoration:none;cursor:pointer}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="head"><div><h1>Kaveri Batch Debug</h1><div class="muted">Live startup diagnostics</div></div><a href="/batches.html">Back to Batch Manager</a></div>
+      <div class="box"><div id="log">Starting diagnostic…</div></div>
+    </div>
+    <script type="module" src="/src/batch-debug.js"></script>
+  </body>
+</html>
