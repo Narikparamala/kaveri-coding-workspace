@@ -15,7 +15,7 @@ supabase.getStoredSession = async function getStoredSession(context) {
 };
 
 const legacy = require('./server-extension');
-const { ClassroomProvider } = require('./classroom-webview-v2');
+const { ClassroomProvider } = require('./classroom-webview-v3');
 
 async function openSolutionFile() {
   const folder = vscode.workspace.workspaceFolders?.[0];
@@ -42,8 +42,8 @@ async function openSolutionFile() {
 
 function activate(context) {
   // All proven v0.10 functionality remains active underneath the new UI.
-  // Student database policies now ensure only unlocked live-class content can
-  // be fetched by those legacy commands.
+  // Student database policies ensure only active live/make-up content can be
+  // fetched by those legacy commands.
   legacy.activate(context);
 
   const classroom = new ClassroomProvider(context);
