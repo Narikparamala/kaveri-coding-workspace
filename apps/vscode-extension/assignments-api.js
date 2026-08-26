@@ -62,6 +62,7 @@ function mapAssignment(row, { locked = false } = {}) {
     updatedAt: row.updated_at,
     isLocked: locked,
     isUnlocked: !locked,
+    liveAvailable: Boolean(row.live_available),
     batchId: row.batch_id || null,
     batchName: row.batch_name || '',
     accessSource: row.access_source || (locked ? 'locked' : 'staff_preview'),
@@ -119,6 +120,17 @@ async function fetchPublishedAssignments(context) {
   return classroom.filter((assignment) => !assignment.isLocked);
 }
 
+async function joinLiveClass(context, batchId) {
+  const session = await ensureSession(context);
+  if (!session) return undefined;
+  if (!batchId) throw new Error('Your active batch could not be identified.');
+
+  const rows = await postRpc('join_coding_live_class', session.access_token, {
+    p_batch_id: batchId
+  });
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
 async function requestAssignmentAccess(context, assignment, reason = '') {
   const session = await ensureSession(context);
   if (!session) return undefined;
@@ -131,12 +143,12 @@ async function requestAssignmentAccess(context, assignment, reason = '') {
     p_batch_id: assignment.batchId,
     p_reason: reason || null
   });
-
   return Array.isArray(rows) ? rows[0] : rows;
 }
 
 module.exports = {
   fetchPublishedAssignments,
   fetchClassroomAssignments,
+  joinLiveClass,
   requestAssignmentAccess
 };
