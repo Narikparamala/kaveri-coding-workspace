@@ -63,7 +63,10 @@ function mapAssignment(row, { locked = false } = {}) {
     isLocked: locked,
     isUnlocked: !locked,
     batchId: row.batch_id || null,
-    batchName: row.batch_name || ''
+    batchName: row.batch_name || '',
+    accessSource: row.access_source || (locked ? 'locked' : 'staff_preview'),
+    accessUntil: row.access_until || null,
+    requestStatus: row.request_status || null
   };
 }
 
@@ -116,4 +119,24 @@ async function fetchPublishedAssignments(context) {
   return classroom.filter((assignment) => !assignment.isLocked);
 }
 
-module.exports = { fetchPublishedAssignments, fetchClassroomAssignments };
+async function requestAssignmentAccess(context, assignment, reason = '') {
+  const session = await ensureSession(context);
+  if (!session) return undefined;
+  if (!assignment?.databaseId || !assignment?.batchId) {
+    throw new Error('This question is not linked to your active class.');
+  }
+
+  const rows = await postRpc('request_coding_assignment_access', session.access_token, {
+    p_assignment_id: assignment.databaseId,
+    p_batch_id: assignment.batchId,
+    p_reason: reason || null
+  });
+
+  return Array.isArray(rows) ? rows[0] : rows;
+}
+
+module.exports = {
+  fetchPublishedAssignments,
+  fetchClassroomAssignments,
+  requestAssignmentAccess
+};
