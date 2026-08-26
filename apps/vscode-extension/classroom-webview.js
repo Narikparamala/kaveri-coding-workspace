@@ -3,6 +3,7 @@ const path = require('path');
 const { getStoredSession } = require('./supabase');
 const { fetchPublishedAssignments } = require('./assignments-api');
 const { fetchMyResults } = require('./results-api');
+const { joinBatchByCode } = require('./batch-api');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -65,6 +66,36 @@ class ClassroomProvider {
     this.refresh({ silent: true });
   }
 
+  async joinStudentBatch() {
+    const session = await getStoredSession(this.context);
+    if (!session) {
+      await vscode.commands.executeCommand('kaveri.signIn');
+      return;
+    }
+
+    if (session.profile?.role && session.profile.role !== 'student') {
+      vscode.window.showInformationMessage('Kaveri: Staff accounts use Preview Mode and do not join student batches.');
+      return;
+    }
+
+    const code = await vscode.window.showInputBox({
+      title: 'Kaveri Coding — Join Your Class',
+      prompt: 'Enter the batch code given by your teacher.',
+      placeHolder: 'Example: KAV-7WNM6X',
+      ignoreFocusOut: true,
+      validateInput: (value) => value.trim().length < 4 ? 'Enter a valid batch code.' : undefined
+    });
+
+    if (!code) return;
+
+    const result = await joinBatchByCode(this.context, code);
+    if (!result) return;
+
+    await this.context.globalState.update('kaveri.batchName', result.batch_name || 'My Class');
+    vscode.window.showInformationMessage(`Kaveri: Joined ${result.batch_name} successfully.`);
+    await this.refresh({ silent: true });
+  }
+
   async handleMessage(message) {
     try {
       switch (message?.type) {
@@ -74,11 +105,11 @@ class ClassroomProvider {
           break;
         case 'signOut':
           await vscode.commands.executeCommand('kaveri.signOut');
+          await this.context.globalState.update('kaveri.batchName', undefined);
           await this.refresh({ silent: true });
           break;
         case 'joinBatch':
-          await vscode.commands.executeCommand('kaveri.joinBatch');
-          await this.refresh({ silent: true });
+          await this.joinStudentBatch();
           break;
         case 'refresh':
           await this.refresh();
@@ -113,7 +144,7 @@ class ClassroomProvider {
     if (this.loading) return;
     this.loading = true;
     this.error = '';
-    this.render();
+    await this.render();
 
     try {
       const session = await getStoredSession(this.context);
@@ -142,7 +173,7 @@ class ClassroomProvider {
       this.error = error.message || String(error);
     } finally {
       this.loading = false;
-      this.render();
+      await this.render();
     }
   }
 
@@ -151,12 +182,15 @@ class ClassroomProvider {
     const session = await getStoredSession(this.context);
     const batchName = this.context.globalState.get('kaveri.batchName', '');
     const currentFolder = currentFolderName();
-    const currentAssignment = this.assignments.find((item) => folderName(item.title) === currentFolder);
+    const role = session?.profile?.role || 'student';
+    const isStaff = Boolean(session) && role !== 'student';
+    const rawCurrent = this.assignments.find((item) => folderName(item.title) === currentFolder);
+    const currentAssignment = rawCurrent && (batchName || isStaff) ? rawCurrent : undefined;
     const resultMap = latestResultByAssignment(this.results);
-    this.view.webview.html = this.html({ session, batchName, currentAssignment, resultMap });
+    this.view.webview.html = this.html({ session, batchName, currentAssignment, resultMap, role, isStaff });
   }
 
-  html({ session, batchName, currentAssignment, resultMap }) {
+  html({ session, batchName, currentAssignment, resultMap, role, isStaff }) {
     const nonce = Math.random().toString(36).slice(2);
     const csp = this.view.webview.cspSource;
     const signedIn = Boolean(session);
@@ -182,14 +216,14 @@ class ClassroomProvider {
               <button class="primary" data-action="openAssignment" data-id="${escapeHtml(assignment.id)}">${isCurrent ? 'Continue Coding' : 'Start Assignment'}</button>
             </article>`;
         }).join('')
-      : `<div class="empty-state"><div class="empty-icon">📘</div><strong>No assignments available yet</strong><span>Your teacher will unlock class questions when they are ready.</span></div>`;
+      : `<div class="empty-state"><div class="empty-icon">📘</div><strong>No class questions available yet</strong><span>Your teacher will unlock questions when the live class reaches them.</span></div>`;
 
     const currentSection = currentAssignment
       ? `
         <section class="current-work">
           <div class="section-label">CURRENT WORK</div>
           <h2>${escapeHtml(currentAssignment.title)}</h2>
-          <p>Follow these steps in order. Kaveri will handle the rest.</p>
+          <p>Follow these steps in order. Kaveri will guide you through the assignment.</p>
           <div class="steps">
             <div class="step done"><span>1</span><div><strong>Question opened</strong><small>Read question.md</small></div><b>✓</b></div>
             <div class="step active"><span>2</span><div><strong>Write your Python code</strong><small>Use ${escapeHtml(currentAssignment.fileName || 'main.py')}</small></div></div>
@@ -204,6 +238,28 @@ class ClassroomProvider {
         </section>`
       : '';
 
+    let accountCallout = '';
+    if (isStaff) {
+      accountCallout = `
+        <section class="staff-callout">
+          <div class="callout-icon">👨‍🏫</div>
+          <div>
+            <strong>Staff Preview Mode</strong>
+            <p>You are signed in as <b>${escapeHtml(role)}</b>. Staff accounts can preview published assignments, but student batch joining is intentionally disabled.</p>
+          </div>
+        </section>`;
+    } else if (!batchName) {
+      accountCallout = `
+        <section class="setup-callout">
+          <div class="callout-icon">🔑</div>
+          <div><strong>One step left — join your class</strong><p>Ask your teacher for the Kaveri batch code.</p></div>
+          <button class="primary" data-action="joinBatch">Join Batch</button>
+        </section>`;
+    } else {
+      accountCallout = `
+        <section class="ready-strip"><span>✓</span><div><strong>You're ready for class</strong><small>${escapeHtml(batchName)}</small></div></section>`;
+    }
+
     const body = !signedIn
       ? `
         <section class="welcome-card">
@@ -214,7 +270,7 @@ class ClassroomProvider {
           <div class="setup-list">
             <div class="setup-row active"><span>1</span><div><strong>Sign in with Google</strong><small>Use your own Gmail account</small></div></div>
             <div class="setup-row"><span>2</span><div><strong>Join your class</strong><small>Enter the batch code from your teacher</small></div></div>
-            <div class="setup-row"><span>3</span><div><strong>Start coding</strong><small>Your class questions appear here</small></div></div>
+            <div class="setup-row"><span>3</span><div><strong>Start coding</strong><small>Your live-class questions appear here</small></div></div>
           </div>
           <button class="primary large" data-action="signIn">Continue with Google</button>
           <p class="privacy-note">Kaveri uses your Google account only to identify your student account.</p>
@@ -224,23 +280,18 @@ class ClassroomProvider {
           <div>
             <div class="eyebrow">KAVERI CODING</div>
             <h1>Hi, ${escapeHtml(name.split(' ')[0] || name)} 👋</h1>
-            <p>${batchName ? `You're learning in <strong>${escapeHtml(batchName)}</strong>.` : 'Join your class to receive the correct live assignments.'}</p>
+            <p>${isStaff ? 'Preview the student coding experience safely.' : (batchName ? `You're learning in <strong>${escapeHtml(batchName)}</strong>.` : 'Join your class to receive the correct live assignments.')}</p>
           </div>
           <div class="avatar">${escapeHtml((name[0] || 'S').toUpperCase())}</div>
         </header>
 
-        ${!batchName ? `
-          <section class="setup-callout">
-            <div class="callout-icon">🔑</div>
-            <div><strong>One step left — join your class</strong><p>Ask your teacher for the Kaveri batch code.</p></div>
-            <button class="primary" data-action="joinBatch">Join Batch</button>
-          </section>` : `
-          <section class="ready-strip"><span>✓</span><div><strong>You're ready for class</strong><small>${escapeHtml(batchName)}</small></div></section>`}
-
+        ${accountCallout}
         ${currentSection}
 
         <section>
-          <div class="section-heading"><div><div class="section-label">YOUR CLASS</div><h2>Assignments</h2></div><button class="text-button" data-action="refresh">↻ Refresh</button></div>
+          <div class="section-heading"><div><div class="section-label">${isStaff ? 'STUDENT PREVIEW' : 'YOUR CLASS'}</div><h2>Assignments</h2></div><button class="text-button" data-action="refresh">↻ Refresh</button></div>
+          ${this.loading ? '<div class="loading-line">Refreshing classroom…</div>' : ''}
+          ${this.error ? `<div class="error-line">${escapeHtml(this.error)}</div>` : ''}
           <div class="assignment-list">${assignmentCards}</div>
         </section>
 
@@ -262,7 +313,7 @@ class ClassroomProvider {
             <li>Write your answer in <strong>main.py</strong>.</li>
             <li>Return here and click <strong>Run Tests</strong>.</li>
             <li>When ready, click <strong>Submit Answer</strong>.</li>
-            <li>Your teacher's marks and feedback will appear in Kaveri after review.</li>
+            <li>Your teacher's marks and feedback appear after review.</li>
           </ol>
         </details>
 
@@ -285,8 +336,8 @@ class ClassroomProvider {
     h3 { font-size:15px; margin:8px 0; }
     p { line-height:1.5; color:var(--vscode-descriptionForeground); }
     .eyebrow,.section-label { font-size:10px; font-weight:800; letter-spacing:.12em; color:var(--vscode-textLink-foreground); }
-    .welcome-card,.current-work,.progress-card,.help-card,.assignment-card,.setup-callout,.ready-strip { border:1px solid var(--vscode-widget-border); background:var(--vscode-editor-background); border-radius:10px; }
-    .welcome-card { padding:22px 16px; text-align:left; }
+    .welcome-card,.current-work,.progress-card,.help-card,.assignment-card,.setup-callout,.staff-callout,.ready-strip { border:1px solid var(--vscode-widget-border); background:var(--vscode-editor-background); border-radius:10px; }
+    .welcome-card { padding:22px 16px; }
     .hero-icon { width:48px; height:48px; display:grid; place-items:center; border-radius:12px; background:var(--vscode-textBlockQuote-background); font-size:24px; margin-bottom:16px; }
     .setup-list { display:grid; gap:9px; margin:18px 0; }
     .setup-row { display:flex; gap:10px; align-items:center; opacity:.62; }
@@ -299,66 +350,73 @@ class ClassroomProvider {
     .primary { background:var(--vscode-button-background); color:var(--vscode-button-foreground); }
     .primary:hover { background:var(--vscode-button-hoverBackground); }
     .secondary { background:var(--vscode-button-secondaryBackground); color:var(--vscode-button-secondaryForeground); border:1px solid var(--vscode-widget-border); }
-    .secondary:hover { background:var(--vscode-button-secondaryHoverBackground); }
-    .large { width:100%; min-height:42px; }
-    .full { width:100%; }
-    .privacy-note { font-size:11px; margin:10px 0 0; text-align:center; }
-    .student-header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
-    .student-header p { margin:0; }
-    .avatar { width:42px; height:42px; flex:0 0 42px; border-radius:50%; display:grid; place-items:center; font-size:17px; font-weight:800; background:var(--vscode-badge-background); color:var(--vscode-badge-foreground); }
-    .setup-callout { padding:12px; display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; margin-bottom:14px; }
+    .large,.full { width:100%; }
+    .large { padding:11px 14px; }
+    .text-button,.link-button { background:transparent; color:var(--vscode-textLink-foreground); padding:5px; }
+    .privacy-note { margin:10px 0 0; font-size:11px; }
+    .student-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 16px; }
+    .student-header p { margin-bottom:0; }
+    .avatar { width:46px; height:46px; flex:0 0 46px; border-radius:50%; display:grid; place-items:center; background:var(--vscode-button-background); color:var(--vscode-button-foreground); font-weight:900; font-size:17px; }
+    .setup-callout,.staff-callout { padding:13px; margin-bottom:14px; display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center; }
     .setup-callout button { grid-column:1 / -1; }
-    .setup-callout p { margin:3px 0 0; font-size:12px; }
-    .callout-icon { font-size:22px; }
-    .ready-strip { display:flex; gap:10px; align-items:center; padding:10px 12px; margin-bottom:14px; }
-    .ready-strip > span { display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--vscode-testing-iconPassed); color:#fff; font-weight:900; }
+    .staff-callout { border-color:var(--vscode-textLink-foreground); }
+    .staff-callout p,.setup-callout p { margin:3px 0 0; font-size:12px; }
+    .callout-icon { font-size:21px; }
+    .ready-strip { display:flex; align-items:center; gap:10px; padding:11px 13px; margin-bottom:14px; }
+    .ready-strip > span { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; background:#36a269; color:white; font-weight:900; }
     .ready-strip strong,.ready-strip small { display:block; }
     .ready-strip small { color:var(--vscode-descriptionForeground); margin-top:2px; }
-    .current-work { padding:14px; margin-bottom:16px; border-left:3px solid var(--vscode-textLink-foreground); }
+    .current-work { padding:14px; margin-bottom:18px; border-left:3px solid var(--vscode-textLink-foreground); }
     .steps { display:grid; gap:7px; margin:12px 0; }
-    .step { display:flex; gap:9px; align-items:center; padding:8px; border-radius:7px; background:var(--vscode-textBlockQuote-background); }
+    .step { display:flex; align-items:center; gap:10px; padding:9px; border-radius:7px; background:var(--vscode-list-inactiveSelectionBackground); }
+    .step > div { min-width:0; flex:1; }
+    .step.done > span { background:#45b97c; color:white; border-color:transparent; }
     .step.active > span { background:var(--vscode-button-background); color:var(--vscode-button-foreground); border-color:transparent; }
-    .step.done > span { background:var(--vscode-testing-iconPassed); color:#fff; border-color:transparent; }
-    .step b { margin-left:auto; color:var(--vscode-testing-iconPassed); }
+    .step b { color:#45b97c; }
     .action-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
     .action-grid .full { grid-column:1 / -1; }
-    .section-heading { display:flex; align-items:end; justify-content:space-between; gap:8px; margin:4px 0 10px; }
+    .section-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; margin:4px 0 9px; }
     .section-heading h2 { margin:3px 0 0; }
-    .text-button,.link-button { background:transparent; color:var(--vscode-textLink-foreground); padding:5px; }
     .assignment-list { display:grid; gap:9px; }
     .assignment-card { padding:12px; }
-    .assignment-card.current { border-color:var(--vscode-focusBorder); }
-    .card-top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .assignment-card.current { border-color:var(--vscode-textLink-foreground); }
+    .card-top { display:flex; justify-content:space-between; gap:8px; align-items:center; }
     .topic,.marks,.status { font-size:11px; }
-    .topic { color:var(--vscode-textLink-foreground); font-weight:800; }
+    .topic { color:var(--vscode-textLink-foreground); font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
     .marks { color:var(--vscode-descriptionForeground); }
-    .question-preview { font-size:12px; margin:0 0 9px; }
-    .status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:999px; margin-bottom:9px; background:var(--vscode-textBlockQuote-background); }
-    .status.success { color:var(--vscode-testing-iconPassed); }
-    .status.warning { color:var(--vscode-testing-iconQueued); }
-    .status.info { color:var(--vscode-textLink-foreground); }
-    .assignment-card .primary { width:100%; }
-    .empty-state { display:grid; justify-items:center; gap:5px; padding:24px 12px; text-align:center; color:var(--vscode-descriptionForeground); border:1px dashed var(--vscode-widget-border); border-radius:10px; }
-    .empty-state strong { color:var(--vscode-foreground); }
+    .question-preview { font-size:12px; margin-bottom:10px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+    .status { display:inline-flex; gap:5px; align-items:center; padding:4px 7px; border-radius:999px; margin:0 0 10px; background:var(--vscode-badge-background); color:var(--vscode-badge-foreground); }
+    .status.success { background:#217346; color:#fff; }
+    .status.warning { background:#8a5b00; color:#fff; }
+    .status.info { background:#246a93; color:#fff; }
+    .assignment-card > button { width:100%; }
+    .empty-state { padding:22px 12px; text-align:center; color:var(--vscode-descriptionForeground); border:1px dashed var(--vscode-widget-border); border-radius:10px; }
+    .empty-state strong,.empty-state span { display:block; }
+    .empty-state strong { color:var(--vscode-foreground); margin:7px 0 4px; }
     .empty-icon { font-size:25px; }
     .progress-card { padding:13px; margin-top:16px; }
-    .progress-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:10px 0; }
-    .progress-stats div { text-align:center; padding:8px 3px; background:var(--vscode-textBlockQuote-background); border-radius:7px; }
+    .progress-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin:10px 0; }
+    .progress-stats > div { text-align:center; padding:9px 4px; border-radius:7px; background:var(--vscode-list-inactiveSelectionBackground); }
     .progress-stats strong,.progress-stats span { display:block; }
     .progress-stats strong { font-size:18px; }
-    .progress-stats span { font-size:10px; color:var(--vscode-descriptionForeground); margin-top:2px; }
-    .help-card { margin-top:12px; padding:10px 12px; }
+    .progress-stats span { font-size:10px; color:var(--vscode-descriptionForeground); }
+    .help-card { margin-top:12px; padding:12px; }
     .help-card summary { cursor:pointer; font-weight:700; }
-    .help-card ol { padding-left:18px; color:var(--vscode-descriptionForeground); line-height:1.55; font-size:12px; }
-    footer { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:14px; padding-top:10px; border-top:1px solid var(--vscode-widget-border); color:var(--vscode-descriptionForeground); font-size:10px; }
-    footer span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .loading { display:flex; gap:8px; align-items:center; padding:8px 0; color:var(--vscode-descriptionForeground); }
-    .error { margin:0 0 12px; padding:9px; border:1px solid var(--vscode-inputValidation-errorBorder); border-radius:7px; color:var(--vscode-errorForeground); }
+    .help-card ol { padding-left:20px; line-height:1.55; color:var(--vscode-descriptionForeground); font-size:12px; }
+    footer { margin:14px 2px 2px; display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--vscode-descriptionForeground); font-size:11px; }
+    footer span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .loading-line,.error-line { padding:8px 10px; margin-bottom:8px; border-radius:6px; font-size:11px; }
+    .loading-line { background:var(--vscode-list-inactiveSelectionBackground); color:var(--vscode-descriptionForeground); }
+    .error-line { background:var(--vscode-inputValidation-errorBackground); border:1px solid var(--vscode-inputValidation-errorBorder); }
+    @media (max-width:310px) {
+      body { padding:10px; }
+      .action-grid { grid-template-columns:1fr; }
+      .action-grid .full { grid-column:auto; }
+      .progress-stats { grid-template-columns:1fr; }
+    }
   </style>
 </head>
 <body>
-  ${this.loading ? '<div class="loading">↻ Loading Kaveri Classroom…</div>' : ''}
-  ${this.error ? `<div class="error">${escapeHtml(this.error)}</div>` : ''}
   ${body}
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -366,11 +424,11 @@ class ClassroomProvider {
       const button = event.target.closest('[data-action]');
       if (!button) return;
       const action = button.dataset.action;
-      if (action === 'openAssignment') {
-        vscode.postMessage({ type: action, assignmentId: button.dataset.id });
-      } else {
-        vscode.postMessage({ type: action });
-      }
+      const payload = { type: action };
+      if (button.dataset.id) payload.assignmentId = button.dataset.id;
+      button.disabled = true;
+      vscode.postMessage(payload);
+      setTimeout(() => { button.disabled = false; }, 1200);
     });
   </script>
 </body>
