@@ -22,17 +22,21 @@ async function parseResponse(response) {
   return data;
 }
 
+function headers(accessToken) {
+  return {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${accessToken}`,
+    'Content-Type': 'application/json'
+  };
+}
+
 async function joinBatchByCode(context, code) {
   const session = await ensureSession(context);
   if (!session) return undefined;
 
   const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/join_batch_by_code`, {
     method: 'POST',
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${session.access_token}`,
-      'Content-Type': 'application/json'
-    },
+    headers: headers(session.access_token),
     body: JSON.stringify({ p_code: String(code || '').trim() })
   });
 
@@ -40,4 +44,18 @@ async function joinBatchByCode(context, code) {
   return Array.isArray(data) ? data[0] : data;
 }
 
-module.exports = { joinBatchByCode };
+async function fetchMyBatches(context, existingSession) {
+  const session = existingSession || await ensureSession(context);
+  if (!session) return [];
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_my_coding_batches`, {
+    method: 'POST',
+    headers: headers(session.access_token),
+    body: '{}'
+  });
+
+  const data = await parseResponse(response);
+  return Array.isArray(data) ? data : [];
+}
+
+module.exports = { joinBatchByCode, fetchMyBatches };
