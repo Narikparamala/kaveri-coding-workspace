@@ -32,10 +32,42 @@ async function getRows(path, accessToken) {
   return parseResponse(response);
 }
 
-async function fetchPublishedAssignments(context) {
-  const session = await ensureSession(context);
-  if (!session) return [];
+async function postRpc(name, accessToken, body = {}) {
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  return parseResponse(response);
+}
 
+function mapAssignment(row, { locked = false } = {}) {
+  const tests = Array.isArray(row.visible_tests) ? row.visible_tests : [];
+  return {
+    id: row.assignment_key,
+    databaseId: row.database_id || row.id,
+    title: row.title,
+    topic: row.topic || 'Python',
+    marks: Number(row.marks || 0),
+    question: locked ? '' : (row.question || ''),
+    language: row.language || 'python',
+    fileName: row.file_name || 'main.py',
+    starterCode: locked ? '' : (row.starter_code || ''),
+    examples: locked ? [] : tests.slice(0, 2),
+    tests: locked ? [] : tests,
+    updatedAt: row.updated_at,
+    isLocked: locked,
+    isUnlocked: !locked,
+    batchId: row.batch_id || null,
+    batchName: row.batch_name || ''
+  };
+}
+
+async function fetchStaffPublishedAssignments(session) {
   const assignmentQuery = '/rest/v1/coding_vscode_assignments?is_published=eq.true&language=eq.python&select=id,assignment_key,title,topic,question,language,file_name,starter_code,marks,updated_at&order=created_at.asc';
   const testQuery = '/rest/v1/coding_vscode_test_cases?is_hidden=eq.false&select=assignment_id,input_text,expected_output,position&order=position.asc';
 
@@ -51,23 +83,37 @@ async function fetchPublishedAssignments(context) {
     testsByAssignment.set(test.assignment_id, list);
   }
 
-  return (assignmentRows || []).map((row) => {
-    const tests = testsByAssignment.get(row.id) || [];
-    return {
-      id: row.assignment_key,
-      databaseId: row.id,
-      title: row.title,
-      topic: row.topic || 'Python',
-      marks: Number(row.marks || 0),
-      question: row.question || '',
-      language: row.language || 'python',
-      fileName: row.file_name || 'main.py',
-      starterCode: row.starter_code || '',
-      examples: tests.slice(0, 2),
-      tests,
-      updatedAt: row.updated_at
-    };
-  });
+  return (assignmentRows || []).map((row) => mapAssignment({
+    ...row,
+    database_id: row.id,
+    visible_tests: testsByAssignment.get(row.id) || []
+  }));
 }
 
-module.exports = { fetchPublishedAssignments };
+async function fetchClassroomAssignments(context, existingSession) {
+  const session = existingSession || await ensureSession(context);
+  if (!session) return [];
+
+  const role = session.profile?.role;
+  if (role && role !== 'student') {
+    return fetchStaffPublishedAssignments(session);
+  }
+
+  const rows = await postRpc('get_my_coding_classroom_assignments', session.access_token);
+  return (rows || []).map((row) => mapAssignment(row, { locked: !row.is_unlocked }));
+}
+
+async function fetchPublishedAssignments(context) {
+  const session = await ensureSession(context);
+  if (!session) return [];
+
+  const role = session.profile?.role;
+  if (role && role !== 'student') {
+    return fetchStaffPublishedAssignments(session);
+  }
+
+  const classroom = await fetchClassroomAssignments(context, session);
+  return classroom.filter((assignment) => !assignment.isLocked);
+}
+
+module.exports = { fetchPublishedAssignments, fetchClassroomAssignments };
