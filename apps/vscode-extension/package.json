@@ -1,8 +1,8 @@
 {
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
-  "description": "Kaveri Technologies coding assignments directly inside VS Code.",
-  "version": "0.10.0",
+  "description": "Kaveri Technologies coding classroom directly inside VS Code.",
+  "version": "0.11.0",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -14,7 +14,7 @@
     "type": "git",
     "url": "https://github.com/Narikparamala/kaveri-coding-workspace.git"
   },
-  "main": "./server-extension.js",
+  "main": "./classroom-entry.js",
   "scripts": {
     "package": "npx @vscode/vsce package --out kaveri-coding.vsix"
   },
@@ -31,6 +31,10 @@
       {
         "command": "kaveri.openWorkspaceFolder",
         "title": "Kaveri: Open Coding Folder"
+      },
+      {
+        "command": "kaveri.openSolutionFile",
+        "title": "Kaveri: Open Solution File"
       },
       {
         "command": "kaveri.runTests",
@@ -82,48 +86,23 @@
     "views": {
       "kaveri-coding": [
         {
+          "id": "kaveri.classroom",
+          "name": "Coding Classroom",
+          "type": "webview"
+        },
+        {
           "id": "kaveri.assignments",
-          "name": "My Assignments"
+          "name": "My Assignments (Classic)",
+          "when": "kaveri.showClassicViews"
         },
         {
           "id": "kaveri.results",
-          "name": "My Results"
+          "name": "My Results (Classic)",
+          "when": "kaveri.showClassicViews"
         }
       ]
     },
     "menus": {
-      "view/title": [
-        {
-          "command": "kaveri.signIn",
-          "when": "view == kaveri.assignments",
-          "group": "navigation@1"
-        },
-        {
-          "command": "kaveri.joinBatch",
-          "when": "view == kaveri.assignments",
-          "group": "navigation@2"
-        },
-        {
-          "command": "kaveri.refreshAssignments",
-          "when": "view == kaveri.assignments",
-          "group": "navigation@3"
-        },
-        {
-          "command": "kaveri.openWorkspaceFolder",
-          "when": "view == kaveri.assignments",
-          "group": "navigation@4"
-        },
-        {
-          "command": "kaveri.signIn",
-          "when": "view == kaveri.results",
-          "group": "navigation@1"
-        },
-        {
-          "command": "kaveri.refreshResults",
-          "when": "view == kaveri.results",
-          "group": "navigation@2"
-        }
-      ],
       "editor/title": [
         {
           "command": "kaveri.runTests",
