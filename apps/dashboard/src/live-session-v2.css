@@ -1,0 +1,150 @@
+.live-session-shell { padding-bottom: 64px; }
+
+.live-control-panel {
+  margin-top: 24px;
+  padding: 24px;
+  background: var(--surface-lowest);
+  border: 1px solid #dfe5eb;
+  border-top: 4px solid var(--sky);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+
+.live-control-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+.live-control-heading h2 { margin: 3px 0 7px; color: var(--primary-deep); }
+.live-control-heading p { margin: 0; max-width: 720px; }
+.live-now-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #e8f7ef;
+  color: #127445;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.live-now-pill.idle { background: #f1f3f5; color: #68707a; }
+
+.session-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, .65fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid #e4e8ec;
+  border-radius: var(--radius-lg);
+}
+.session-toolbar label { display: grid; gap: 7px; font-size: 12px; font-weight: 800; color: var(--primary-deep); }
+.session-toolbar-actions { display: flex; gap: 8px; }
+.session-toolbar-actions button { min-height: 42px; }
+
+.session-question-list { display: grid; gap: 10px; margin-top: 16px; }
+.session-question {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 66px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid #dfe5eb;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+.session-question:hover { border-color: #9eb8d1; background: #fbfdff; }
+.session-question.is-live { border-color: #91cfac; box-shadow: inset 4px 0 0 #2d9a5f; }
+.session-question input { position: absolute; opacity: 0; pointer-events: none; }
+.session-checkmark {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #c7d1da;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  color: var(--primary-deep);
+  background: #fff;
+}
+.session-question input:checked + .session-checkmark { background: var(--gold); border-color: #d8b800; }
+.session-question-copy { display: grid; gap: 4px; min-width: 0; }
+.session-question-copy strong { color: var(--primary-deep); font-size: 15px; }
+.session-question-copy small { color: #707780; font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; overflow-wrap: anywhere; }
+.session-status { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 5px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.session-status.live { background: #e8f7ef; color: #127445; }
+.session-status.history { background: #eef2f6; color: #4f5d69; }
+.session-status.new { background: var(--sky-soft); color: #00688f; }
+
+.session-footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e4e8ec;
+  color: #68707a;
+}
+.session-footer-actions > div:last-child { display: flex; gap: 10px; }
+.session-footer-actions button { min-height: 42px; }
+.danger-soft { border-color: #e7b0aa !important; color: #a8352b !important; background: #fff !important; }
+.danger-soft:hover { background: #fff1ef !important; }
+.danger-soft:disabled, .session-footer-actions button:disabled { opacity: .45; cursor: not-allowed; }
+
+.makeup-section { margin-top: 34px; }
+.makeup-request-list { display: grid; gap: 10px; }
+.makeup-request-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #dfe5eb;
+  border-left: 4px solid var(--gold);
+  border-radius: var(--radius-lg);
+}
+.makeup-request-main { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.request-avatar { width: 40px; height: 40px; flex: 0 0 40px; display: grid; place-items: center; border-radius: 50%; background: var(--primary-soft); color: var(--primary-deep); font-weight: 800; }
+.makeup-request-main > div:last-child { display: grid; gap: 3px; min-width: 0; }
+.makeup-request-main strong { color: var(--primary-deep); }
+.makeup-request-main span, .makeup-request-main small { color: #68707a; overflow-wrap: anywhere; }
+.makeup-request-main small { font-size: 11px; }
+.makeup-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.reject-access { color: #a8352b !important; }
+.empty-request-state { padding: 18px; text-align: center; color: #4f6a59; background: #f4fbf7; border: 1px dashed #a6d6b9; border-radius: var(--radius-lg); }
+
+.compact-batch-card { padding: 16px; }
+.compact-code-box { margin-top: 12px; padding: 11px; }
+.member-details { margin-top: 12px; border-top: 1px solid #e8ebee; padding-top: 10px; }
+.member-details summary { cursor: pointer; color: var(--primary); font-weight: 700; }
+
+@media (max-width: 900px) {
+  .session-toolbar { grid-template-columns: 1fr 1fr; }
+  .session-toolbar-actions { grid-column: 1 / -1; }
+  .live-control-heading { flex-direction: column; }
+  .makeup-request-card { align-items: flex-start; flex-direction: column; }
+  .makeup-actions { width: 100%; justify-content: flex-start; }
+}
+
+@media (max-width: 650px) {
+  .live-control-panel { padding: 16px; }
+  .session-toolbar { grid-template-columns: 1fr; padding: 12px; }
+  .session-toolbar-actions { grid-column: auto; display: grid; grid-template-columns: 1fr 1fr; }
+  .session-question { grid-template-columns: auto minmax(0, 1fr); }
+  .session-status { grid-column: 2; justify-self: start; white-space: normal; }
+  .session-footer-actions { align-items: stretch; flex-direction: column; }
+  .session-footer-actions > div:last-child { display: grid; grid-template-columns: 1fr; }
+  .makeup-actions { display: grid; grid-template-columns: 1fr; }
+  .makeup-actions button { width: 100%; }
+}
