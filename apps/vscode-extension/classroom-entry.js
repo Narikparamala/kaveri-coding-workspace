@@ -1,5 +1,8 @@
 const vscode = require('vscode');
 const supabase = require('./supabase');
+const { openProjectFromUri, syncSavedProjectFile } = require('./project-workspace');
+const { registerProjectSubmission } = require('./project-submission');
+const { registerProjectPublishing } = require('./project-publisher');
 
 // Classroom UI needs to inspect the existing stored login without forcing a
 // browser sign-in. Keep this adapter here so the proven v0.10 auth engine stays
@@ -47,12 +50,16 @@ function activate(context) {
   legacy.activate(context);
 
   const classroom = new ClassroomProvider(context);
+  void registerProjectSubmission(context);
+  void registerProjectPublishing(context);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('kaveri.classroom', classroom, {
       webviewOptions: { retainContextWhenHidden: true }
     }),
-    vscode.commands.registerCommand('kaveri.openSolutionFile', openSolutionFile)
+    vscode.commands.registerCommand('kaveri.openSolutionFile', openSolutionFile),
+    vscode.window.registerUriHandler({ handleUri: (uri) => openProjectFromUri(context, uri) }),
+    vscode.workspace.onDidSaveTextDocument((document) => syncSavedProjectFile(context, document))
   );
 }
 
