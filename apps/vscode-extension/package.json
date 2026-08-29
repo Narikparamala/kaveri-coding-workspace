@@ -2,7 +2,7 @@
   "name": "kaveri-coding",
   "displayName": "Kaveri Coding",
   "description": "Kaveri Technologies coding classroom directly inside VS Code.",
-  "version": "0.11.0",
+  "version": "0.14.3",
   "publisher": "kaveritechnologies",
   "engines": {
     "vscode": "^1.95.0"
@@ -15,6 +15,10 @@
     "url": "https://github.com/Narikparamala/kaveri-coding-workspace.git"
   },
   "main": "./classroom-entry.js",
+  "activationEvents": [
+    "onUri",
+    "workspaceContains:.kaveri/project.json"
+  ],
   "scripts": {
     "package": "npx @vscode/vsce package --out kaveri-coding.vsix"
   },
@@ -72,6 +76,15 @@
       {
         "command": "kaveri.signOut",
         "title": "Kaveri: Sign Out"
+      },
+      {
+        "command": "kaveri.submitProject",
+        "title": "Kaveri: Submit Project",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "kaveri.publishProject",
+        "title": "Kaveri: Publish Project"
       }
     ],
     "viewsContainers": {
