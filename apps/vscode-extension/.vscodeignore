@@ -2,3 +2,4 @@
 .vscode/**
 .git/**
 .github/**
+dev-e2e-harness.js

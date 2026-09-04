@@ -2,7 +2,7 @@ const vscode = require('vscode');
 const path = require('path');
 const os = require('os');
 const core = require('./extension');
-const { signIn, signOut, ensureSession, uploadSubmission } = require('./supabase');
+const { signIn, signOut, ensureSession, uploadSubmission, verifySubmission } = require('./supabase');
 const { fetchPublishedAssignments } = require('./assignments-api');
 const { fetchMyResults } = require('./results-api');
 const { joinBatchByCode } = require('./batch-api');
@@ -52,12 +52,16 @@ async function latestSubmission() {
 function reviewStatus(row) {
   if (row.review_status === 'reviewed') return 'Reviewed';
   if (row.review_status === 'needs_changes') return 'Needs changes';
-  if (row.visible_tests_total > 0 && row.visible_tests_passed === row.visible_tests_total) return 'Tests passed';
+  if (row.verification_status === 'error') return 'Server check failed';
+  if (row.verification_status === 'verified') {
+    return row.verified_summary || `${row.verified_passed}/${row.verified_total} server-verified`;
+  }
+  if (row.visible_tests_total > 0 && row.visible_tests_passed === row.visible_tests_total) return 'Visible tests passed';
   return 'Awaiting review';
 }
 
 function resultScore(row) {
-  const value = row.teacher_score ?? row.provisional_visible_score ?? 0;
+  const value = row.teacher_score ?? row.verified_score ?? row.provisional_visible_score ?? 0;
   const max = row.max_marks ?? 0;
   return `${Number(value).toFixed(Number(value) % 1 ? 1 : 0)}/${Number(max).toFixed(Number(max) % 1 ? 1 : 0)}`;
 }
@@ -65,6 +69,9 @@ function resultScore(row) {
 function resultIcon(row) {
   if (row.review_status === 'reviewed') return 'pass-filled';
   if (row.review_status === 'needs_changes') return 'warning';
+  if (row.verification_status === 'error') return 'warning';
+  if (row.verification_status === 'verified' && row.verified_passed === row.verified_total) return 'verified';
+  if (row.verification_status === 'verified') return 'check';
   if (row.visible_tests_total > 0 && row.visible_tests_passed === row.visible_tests_total) return 'check';
   return 'history';
 }
@@ -95,9 +102,14 @@ class ResultAttemptItem extends vscode.TreeItem {
     super(`Attempt #${row.attempt_number}`, vscode.TreeItemCollapsibleState.None);
     this.row = row;
     this.description = `${resultScore(row)} • ${reviewStatus(row)}`;
+    const verifiedNote = row.verification_status === 'verified'
+      ? `${row.verified_passed}/${row.verified_total} server-verified hidden tests`
+      : '';
     this.tooltip = row.teacher_feedback
       ? `Teacher feedback: ${row.teacher_feedback}`
-      : `${row.visible_tests_passed}/${row.visible_tests_total} visible tests`;
+      : verifiedNote
+        ? `${verifiedNote} • ${row.visible_tests_passed}/${row.visible_tests_total} visible tests (local)`
+        : `${row.visible_tests_passed}/${row.visible_tests_total} visible tests (local)`;
     this.iconPath = new vscode.ThemeIcon(resultIcon(row));
     this.command = {
       command: 'kaveri.openResult',
@@ -201,16 +213,27 @@ function openResult(row) {
 
   const submitted = row.submitted_at || row.created_at;
   const reviewed = row.reviewed_at;
-  const finalLabel = row.teacher_score != null ? 'Teacher mark' : 'Current score';
+  const finalLabel = row.teacher_score != null
+    ? 'Teacher mark'
+    : (row.verification_status === 'verified' ? 'Server-verified score' : 'Provisional score (visible tests only)');
 
   resultsOutput.clear();
   resultsOutput.appendLine('KAVERI CODING — MY RESULT');
   resultsOutput.appendLine('================================');
   resultsOutput.appendLine(`Assignment: ${row.assignment_title}`);
   resultsOutput.appendLine(`Attempt: #${row.attempt_number}`);
-  resultsOutput.appendLine(`Visible tests: ${row.visible_tests_passed}/${row.visible_tests_total}`);
+  resultsOutput.appendLine(`Visible tests (local run): ${row.visible_tests_passed}/${row.visible_tests_total}`);
+  if (row.verification_status === 'verified') {
+    resultsOutput.appendLine(`Server-verified hidden tests: ${row.verified_passed}/${row.verified_total}`);
+    resultsOutput.appendLine(`Verified summary: ${row.verified_summary || ''}`);
+  } else if (row.verification_status === 'error') {
+    resultsOutput.appendLine('Server verification could not finish. Your work is saved for faculty review.');
+  } else {
+    resultsOutput.appendLine('Server verification pending — your submission is saved for faculty review.');
+  }
   resultsOutput.appendLine(`${finalLabel}: ${resultScore(row)}`);
   resultsOutput.appendLine(`Status: ${reviewStatus(row)}`);
+  if (row.verified_at) resultsOutput.appendLine(`Server-verified at: ${new Date(row.verified_at).toLocaleString()}`);
   if (submitted) resultsOutput.appendLine(`Submitted: ${new Date(submitted).toLocaleString()}`);
   if (reviewed) resultsOutput.appendLine(`Reviewed: ${new Date(reviewed).toLocaleString()}`);
   resultsOutput.appendLine('');
@@ -281,18 +304,39 @@ async function submitOnline(context) {
     const serverRow = await uploadSubmission(context, localSubmission);
     if (!serverRow) return;
 
+    // Ask the server to grade the hidden tests and persist the authoritative
+    // result. A verification failure never fails the submission itself — the
+    // row is already saved and stays available to faculty for review.
+    let serverVerification = 'pending';
+    let serverVerifiedSummary = '';
+    try {
+      const verified = await verifySubmission(context, serverRow.id);
+      if (verified && verified.verified) {
+        serverVerification = 'verified';
+        serverVerifiedSummary = verified.verifiedSummary || '';
+      }
+    } catch (verifyError) {
+      console.warn(`Kaveri server verification deferred for ${serverRow.id}:`, verifyError.message || verifyError);
+    }
+
     const uploaded = {
       ...localSubmission,
       studentName: accountName,
       status: 'server_uploaded',
       serverSubmissionId: serverRow.id,
+      serverVerification,
+      serverVerifiedSummary,
       serverUploadedAt: new Date().toISOString()
     };
 
     await writeJson(after.uri, uploaded);
 
     const score = `${uploaded.visibleTestsPassed}/${uploaded.visibleTestsTotal}`;
-    vscode.window.showInformationMessage(`Kaveri: Submitted successfully to server — ${score} visible tests passed.`);
+    if (serverVerification === 'verified') {
+      vscode.window.showInformationMessage(`Kaveri: Submitted and server-verified — ${serverVerifiedSummary || 'hidden tests graded'}.`);
+    } else {
+      vscode.window.showInformationMessage(`Kaveri: Submitted successfully to server — ${score} visible tests passed locally. Server verification is pending; your work is safe.`);
+    }
     if (resultsProvider) await resultsProvider.reload({ silent: true });
   } catch (error) {
     const pending = {

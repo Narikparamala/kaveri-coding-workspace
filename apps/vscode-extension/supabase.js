@@ -352,6 +352,34 @@ async function signOut(context) {
   vscode.window.showInformationMessage('Kaveri: Signed out from this VS Code installation.');
 }
 
+async function verifySubmission(context, submissionId) {
+  const session = await ensureSession(context);
+  if (!session) return undefined;
+
+  const doVerify = async (activeSession) => {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/secure-grade`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${activeSession.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ kind: 'vscode', submissionId })
+    });
+    return parseResponse(response);
+  };
+
+  try {
+    return await doVerify(session);
+  } catch (error) {
+    if (error.status === 401) {
+      const refreshed = await refreshSession(context, session);
+      if (refreshed) return doVerify(refreshed);
+    }
+    throw error;
+  }
+}
+
 async function uploadSubmission(context, localSubmission) {
   const session = await ensureSession(context);
   if (!session) return undefined;
@@ -420,5 +448,6 @@ module.exports = {
   signIn,
   signOut,
   ensureSession,
-  uploadSubmission
+  uploadSubmission,
+  verifySubmission
 };
